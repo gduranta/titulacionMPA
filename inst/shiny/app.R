@@ -418,7 +418,7 @@ ui <- bslib::page_navbar(
         bslib::layout_columns(
           col_widths = c(6, 6),
           shiny::downloadButton("btn_dash_export_uno", "Exportar Documento Actual (PDF)", icon = shiny::icon("file-pdf"), class = "btn-primary w-100"),
-          shiny::downloadButton("btn_dash_export_todos", "Generar los 5 Documentos (ZIP)", icon = shiny::icon("layer-group"), class = "btn-warning w-100")
+          shiny::downloadButton("btn_dash_export_todos", "Generar los 5 Documentos (PDF)", icon = shiny::icon("layer-group"), class = "btn-warning w-100")
         ),
         shiny::hr(class = "my-2"),
         shiny::div(
@@ -968,10 +968,10 @@ server <- function(input, output, session) {
   output$btn_dash_export_todos <- shiny::downloadHandler(
     filename = function() {
       item <- obtener_predio_activo()
-      if (is.null(item)) return("expediente_sin_predio.zip")
+      if (is.null(item)) return("expediente_sin_predio.pdf")
       lote_seg <- gsub("[^[:alnum:]_-]", "_", item$lote[1L])
       n_tit <- extraer_corr_form(input$f_titulo, item$num_titulo_num[[1L]])
-      sprintf("EXPEDIENTE_MZ_%s_LOTE_%s_TITULO_%s.zip", item$mz[1L], lote_seg, n_tit)
+      sprintf("EXPEDIENTE_MZ_%s_LOTE_%s_TITULO_%s.pdf", item$mz[1L], lote_seg, n_tit)
     },
     content = function(file) {
       item <- obtener_predio_activo()
@@ -985,18 +985,21 @@ server <- function(input, output, session) {
         r[grepl("\\.pdf$", r, ignore.case = TRUE)][1L]
       }, character(1L))
 
-      if (requireNamespace("zip", quietly = TRUE)) {
-        zip::zipr(zipfile = file, files = unname(rutas))
+      if (requireNamespace("qpdf", quietly = TRUE)) {
+        qpdf::pdf_combine(input = unname(rutas), output = file)
+      } else if (requireNamespace("pdftools", quietly = TRUE)) {
+        pdftools::pdf_combine(input = unname(rutas), output = file)
       } else {
-        utils::zip(zipfile = file, files = unname(rutas), flags = "-j")
+        stop("Instala el paquete 'qpdf' o 'pdftools' para unir los 5 PDFs.")
       }
+
       shiny::showNotification(
-        paste("Expediente completo (5 PDFs) generado para Mz.", item$mz[1L], "Lt.", item$lote[1L]),
+        paste("Expediente unificado (5 documentos en 1 PDF) generado para Mz.", item$mz[1L], "Lt.", item$lote[1L]),
         type = "message"
       )
-      output$dash_estado <- shiny::renderText(paste(c("5 documentos generados:", basename(rutas)), collapse = "\n"))
+      output$dash_estado <- shiny::renderText(paste(c("5 documentos unidos en 1 PDF:", basename(rutas)), collapse = "\n"))
     },
-    contentType = "application/zip"
+    contentType = "application/pdf"
   )
 
   # ============================================================================
