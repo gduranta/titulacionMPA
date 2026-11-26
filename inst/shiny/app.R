@@ -417,8 +417,8 @@ ui <- bslib::page_navbar(
         ),
         bslib::layout_columns(
           col_widths = c(6, 6),
-          shiny::actionButton("btn_dash_export_uno", "Exportar Documento Actual (PDF)", icon = shiny::icon("file-pdf"), class = "btn-primary w-100"),
-          shiny::actionButton("btn_dash_export_todos", "Generar los 5 Documentos (PDF)", icon = shiny::icon("layer-group"), class = "btn-warning w-100")
+          shiny::downloadButton("btn_dash_export_uno", "Exportar Documento Actual (PDF)", icon = shiny::icon("file-pdf"), class = "btn-primary w-100"),
+          shiny::downloadButton("btn_dash_export_todos", "Generar los 5 Documentos (ZIP)", icon = shiny::icon("layer-group"), class = "btn-warning w-100")
         ),
         shiny::hr(class = "my-2"),
         shiny::div(
@@ -861,45 +861,139 @@ server <- function(input, output, session) {
     )
   })
 
-  shiny::observeEvent(input$btn_dash_export_uno, {
-    req(input$dash_cargar_lote)
-    if (identical(input$dash_cargar_lote, "__NUEVO__")) {
-      shiny::showNotification("Primero guarde el predio en el Excel maestro.", type = "warning")
-      return()
+  obtener_predio_activo <- function() {
+    if (is.null(input$dash_cargar_lote) || identical(input$dash_cargar_lote, "__NUEVO__")) {
+      return(NULL)
     }
     ids <- paste0(toupper(rv$df$mz), "_", rv$df$lote)
     fila <- rv$df[ids == input$dash_cargar_lote, , drop = FALSE]
-    if (nrow(fila) == 0L) return()
-    mz <- fila$mz[1L]; lt <- fila$lote[1L]
-    fn <- switch(
-      input$dash_doc,
-      sgpuat     = titulacionMPA::generar_informe_sgpuat,
-      gdur       = titulacionMPA::generar_informe_gdur,
-      legal      = titulacionMPA::generar_informe_legal,
-      resolucion = titulacionMPA::generar_resolucion_alcaldia,
-      titulo     = titulacionMPA::generar_titulo_propiedad
-    )
-    ruta <- fn(mz, lt, config = rv$config, fecha = input$dash_fecha, formato = "pdf", sobrescribir = TRUE)
-    shiny::showNotification(paste("PDF generado:", basename(ruta)), type = "message")
-    output$dash_estado <- shiny::renderText(paste("Archivo exportado en:\n", ruta))
-  })
+    if (nrow(fila) == 0L) return(NULL)
+    fila[1L, ]
+  }
 
-  shiny::observeEvent(input$btn_dash_export_todos, {
-    req(input$dash_cargar_lote)
-    if (identical(input$dash_cargar_lote, "__NUEVO__")) {
-      shiny::showNotification("Primero guarde el predio en el Excel maestro.", type = "warning")
-      return()
+  extraer_corr_form <- function(val_form, val_item) {
+    v <- trimws(if (is.null(val_form)) "" else as.character(val_form)[1L])
+    if (nzchar(v)) {
+      c_num <- pkg_ns$extraer_correlativo(v)
+      if (!is.na(c_num) && nzchar(c_num)) return(c_num)
     }
-    ids <- paste0(toupper(rv$df$mz), "_", rv$df$lote)
-    fila <- rv$df[ids == input$dash_cargar_lote, , drop = FALSE]
-    if (nrow(fila) == 0L) return()
-    mz <- fila$mz[1L]; lt <- fila$lote[1L]
-    res <- titulacionMPA::generar_expediente_completo(
-      mz, lt, config = rv$config, fecha = input$dash_fecha, formato = "pdf", sobrescribir = TRUE
+    if (!is.null(val_item) && !is.na(val_item) && nzchar(trimws(as.character(val_item)[1L]))) {
+      return(trimws(as.character(val_item)[1L]))
+    }
+    "S_N"
+  }
+
+  generar_pdf_oficial <- function(doc_tipo, item) {
+    mz <- item$mz[1L]
+    lt <- item$lote[1L]
+    fecha_doc <- if (!is.null(input$dash_fecha) && nzchar(trimws(input$dash_fecha))) trimws(input$dash_fecha) else NULL
+
+    n_sgpuat <- extraer_corr_form(input$f_inf_sgpuat, item$num_informe_sgpuat_num[[1L]])
+    n_gdur   <- extraer_corr_form(input$f_inf_gdur,   item$num_informe_gdur_num[[1L]])
+    n_legal  <- extraer_corr_form(input$f_inf_legal,  item$num_informe_legal_num[[1L]])
+    n_res    <- extraer_corr_form(input$f_resolucion, item$num_resolucion_num[[1L]])
+    n_tit    <- extraer_corr_form(input$f_titulo,     item$num_titulo_num[[1L]])
+
+    switch(
+      doc_tipo,
+      sgpuat = titulacionMPA::generar_informe_sgpuat(
+        mz, lt, config = rv$config,
+        fecha = if (!is.null(fecha_doc)) fecha_doc else rv$config$meta$FECHA_DEFECTO_SGPUAT,
+        num_informe = n_sgpuat, formato = "pdf", sobrescribir = TRUE, df_cache = rv$df
+      ),
+      gdur = titulacionMPA::generar_informe_gdur(
+        mz, lt, config = rv$config,
+        fecha = if (!is.null(fecha_doc)) fecha_doc else rv$config$meta$FECHA_DEFECTO_GDUR,
+        num_informe = n_gdur, formato = "pdf", sobrescribir = TRUE, df_cache = rv$df
+      ),
+      legal = titulacionMPA::generar_informe_legal(
+        mz, lt, config = rv$config,
+        fecha = if (!is.null(fecha_doc)) fecha_doc else rv$config$meta$FECHA_DEFECTO_LEGAL,
+        num_informe_legal = n_legal, formato = "pdf", sobrescribir = TRUE, df_cache = rv$df
+      ),
+      resolucion = titulacionMPA::generar_resolucion_alcaldia(
+        mz, lt, config = rv$config,
+        fecha = if (!is.null(fecha_doc)) fecha_doc else rv$config$meta$FECHA_DEFECTO_RESOLUCION,
+        num_resolucion = n_res, formato = "pdf", sobrescribir = TRUE, df_cache = rv$df
+      ),
+      titulo = titulacionMPA::generar_titulo_propiedad(
+        mz, lt, config = rv$config,
+        fecha_emision = rv$config$meta$FECHA_DEFECTO_TITULO,
+        fecha_resolucion = if (!is.null(fecha_doc)) fecha_doc else rv$config$meta$FECHA_DEFECTO_RESOLUCION,
+        correlativo = n_tit, num_resolucion = n_res,
+        formato = "pdf", sobrescribir = TRUE, df_cache = rv$df
+      )
     )
-    shiny::showNotification(paste("Expediente completo generado (5 PDFs) para Mz.", mz, "Lt.", lt), type = "message")
-    output$dash_estado <- shiny::renderText(paste(c("5 documentos generados:", unlist(res)), collapse = "\n"))
-  })
+  }
+
+  nombre_pdf_oficial <- function(doc_tipo, item) {
+    anio <- rv$config$meta$ANIO_GESTION
+    lote_seg <- gsub("[^[:alnum:]_-]", "_", item$lote[1L])
+    mz <- item$mz[1L]
+    switch(
+      doc_tipo,
+      sgpuat     = sprintf("INFORME_%s-%s-SGPUAT-GDUR-MPA_MZ_%s_LOTE_%s.pdf", extraer_corr_form(input$f_inf_sgpuat, item$num_informe_sgpuat_num[[1L]]), anio, mz, lote_seg),
+      gdur       = sprintf("INFORME_%s-%s-EEIQ-GDUR-MPA_MZ_%s_LOTE_%s.pdf",   extraer_corr_form(input$f_inf_gdur, item$num_informe_gdur_num[[1L]]),     anio, mz, lote_seg),
+      legal      = sprintf("INFORME_LEGAL_%s-%s-GAL-MPA_MZ_%s_LOTE_%s.pdf",  extraer_corr_form(input$f_inf_legal, item$num_informe_legal_num[[1L]]),   anio, mz, lote_seg),
+      resolucion = sprintf("RESOLUCION_%s-%s-A-MPA_MZ_%s_LOTE_%s.pdf",       extraer_corr_form(input$f_resolucion, item$num_resolucion_num[[1L]]),    anio, mz, lote_seg),
+      titulo     = sprintf("TITULO_%s-%s-A-MPA-C_MZ_%s_LOTE_%s.pdf",         extraer_corr_form(input$f_titulo, item$num_titulo_num[[1L]]),            anio, mz, lote_seg)
+    )
+  }
+
+  output$btn_dash_export_uno <- shiny::downloadHandler(
+    filename = function() {
+      item <- obtener_predio_activo()
+      if (is.null(item)) return("documento_sin_predio.pdf")
+      nombre_pdf_oficial(input$dash_doc, item)
+    },
+    content = function(file) {
+      item <- obtener_predio_activo()
+      if (is.null(item)) {
+        shiny::showNotification("Primero seleccione o guarde un predio en el Excel maestro.", type = "warning")
+        stop("No hay predio seleccionado.")
+      }
+      ruta <- generar_pdf_oficial(input$dash_doc, item)
+      ruta_pdf <- ruta[grepl("\\.pdf$", ruta, ignore.case = TRUE)][1L]
+      file.copy(ruta_pdf, file, overwrite = TRUE)
+      shiny::showNotification(paste("PDF exportado:", basename(ruta_pdf)), type = "message")
+      output$dash_estado <- shiny::renderText(paste("Archivo exportado en:\n", ruta_pdf))
+    },
+    contentType = "application/pdf"
+  )
+
+  output$btn_dash_export_todos <- shiny::downloadHandler(
+    filename = function() {
+      item <- obtener_predio_activo()
+      if (is.null(item)) return("expediente_sin_predio.zip")
+      lote_seg <- gsub("[^[:alnum:]_-]", "_", item$lote[1L])
+      n_tit <- extraer_corr_form(input$f_titulo, item$num_titulo_num[[1L]])
+      sprintf("EXPEDIENTE_MZ_%s_LOTE_%s_TITULO_%s.zip", item$mz[1L], lote_seg, n_tit)
+    },
+    content = function(file) {
+      item <- obtener_predio_activo()
+      if (is.null(item)) {
+        shiny::showNotification("Primero seleccione o guarde un predio en el Excel maestro.", type = "warning")
+        stop("No hay predio seleccionado.")
+      }
+      tipos <- c("sgpuat", "gdur", "legal", "resolucion", "titulo")
+      rutas <- vapply(tipos, function(tp) {
+        r <- generar_pdf_oficial(tp, item)
+        r[grepl("\\.pdf$", r, ignore.case = TRUE)][1L]
+      }, character(1L))
+
+      if (requireNamespace("zip", quietly = TRUE)) {
+        zip::zipr(zipfile = file, files = unname(rutas))
+      } else {
+        utils::zip(zipfile = file, files = unname(rutas), flags = "-j")
+      }
+      shiny::showNotification(
+        paste("Expediente completo (5 PDFs) generado para Mz.", item$mz[1L], "Lt.", item$lote[1L]),
+        type = "message"
+      )
+      output$dash_estado <- shiny::renderText(paste(c("5 documentos generados:", basename(rutas)), collapse = "\n"))
+    },
+    contentType = "application/zip"
+  )
 
   # ============================================================================
   # LÓGICA DEL EDITOR DE PLANTILLAS (CON RESALTADO DE CAMPOS DEL EXCEL)
