@@ -434,10 +434,17 @@ ui <- bslib::page_navbar(
   )
 )
 
+preview_root <- tempfile("titulacion_shiny_root_")
+dir.create(preview_root, recursive = TRUE, showWarnings = FALSE)
+shiny::addResourcePath("preview_pdf", preview_root)
+
 server <- function(input, output, session) {
-  tmp_dir <- tempfile("titulacion_shiny_")
-  dir.create(tmp_dir, recursive = TRUE)
-  shiny::addResourcePath("preview_pdf", tmp_dir)
+  session_id <- if (!is.null(session$token) && nzchar(session$token)) session$token else basename(tempfile("s_"))
+  tmp_dir <- file.path(preview_root, session_id)
+  dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+  session$onSessionEnded(function() {
+    unlink(tmp_dir, recursive = TRUE)
+  })
 
   rv <- shiny::reactiveValues(
     config = config,
@@ -661,7 +668,7 @@ server <- function(input, output, session) {
       prefix = "dash"
     )
     if (res$ok && file.exists(file.path(tmp_dir, res$pdf_name))) {
-      rv$dash_pdf_url <- paste0("preview_pdf/", res$pdf_name)
+      rv$dash_pdf_url <- paste0("preview_pdf/", session_id, "/", res$pdf_name)
       output$dash_estado <- shiny::renderText(paste0("Vista previa lista: Mz. ", item$mz, " Lote ", item$lote, " (", input$dash_doc, ")."))
     } else {
       output$dash_estado <- shiny::renderText(paste("Error de compilación Typst:\n", res$log))
@@ -829,7 +836,7 @@ server <- function(input, output, session) {
 
     rv$payload_editor <- res$payload
     if (res$ok && file.exists(file.path(tmp_dir, res$pdf_name))) {
-      rv$pdf_url <- paste0("preview_pdf/", res$pdf_name)
+      rv$pdf_url <- paste0("preview_pdf/", session_id, "/", res$pdf_name)
       output$estado_compilacion <- shiny::renderText(
         paste0("Compilado OK (", format(Sys.time(), "%H:%M:%S"), ")", if (isTRUE(input$chk_resaltar_pdf)) " [Campos Excel resaltados]" else "")
       )
