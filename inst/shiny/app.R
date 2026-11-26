@@ -874,8 +874,12 @@ server <- function(input, output, session) {
   extraer_corr_form <- function(val_form, val_item) {
     v <- trimws(if (is.null(val_form)) "" else as.character(val_form)[1L])
     if (nzchar(v)) {
-      c_num <- pkg_ns$extraer_correlativo(v)
-      if (!is.na(c_num) && nzchar(c_num)) return(c_num)
+      m <- regmatches(v, regexpr("(?:N[°ºo.]*\\s*)?([0-9]+)", v, perl = TRUE))
+      if (length(m) == 1L && nzchar(m)) {
+        num <- sub("^(?:N[°ºo.]*\\s*)?", "", m, perl = TRUE)
+        if (nzchar(num)) return(num)
+      }
+      return(gsub("[^[:alnum:]_-]", "_", v))
     }
     if (!is.null(val_item) && !is.na(val_item) && nzchar(trimws(as.character(val_item)[1L]))) {
       return(trimws(as.character(val_item)[1L]))
