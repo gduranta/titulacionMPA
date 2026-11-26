@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>titulacionMPA — Municipalidad Provincial de Anta</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --bar: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #0ea5e9;
+      --ok: #22c55e;
+      --err: #ef4444;
+      --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+    .layout { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+    .topbar {
+      height: 46px;
+      background: var(--bar);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand small { color: var(--muted); font-weight: 400; font-size: 12px; }
+    .controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(148, 163, 184, 0.14);
+      color: var(--muted);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .badge.ok { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+    .badge.ok .dot { background: var(--ok); }
+    .badge.err { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+    .badge.err .dot { background: var(--err); }
+    .badge.warn { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+    .badge.warn .dot { background: var(--warn); }
+
+    .btn {
+      background: #334155;
+      color: var(--text);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 5px 11px;
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #475569; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #082f49; font-weight: 600; }
+    .btn.primary:hover { background: #38bdf8; }
+    .btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+
+    .stage { flex: 1; position: relative; background: #ffffff; }
+    iframe { width: 100%; height: 100%; border: none; display: block; }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .overlay.hidden { display: none; }
+    .card {
+      max-width: 560px;
+      width: 100%;
+      background: var(--bar);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    }
+    .card h1 { font-size: 20px; margin-bottom: 8px; }
+    .card p { color: var(--muted); font-size: 14px; line-height: 1.55; margin-bottom: 14px; }
+    .card code {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12.5px;
+      color: #e2e8f0;
+    }
+    .card .meta { font-size: 12px; color: var(--muted); margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header class="topbar">
+      <div class="brand">
+        <span>titulacionMPA</span>
+        <small id="inst-label">Municipalidad Provincial de Anta — GDUR</small>
+      </div>
+      <div class="controls">
+        <span id="status-badge" class="badge warn"><span class="dot"></span><span id="status-text">Conectando...</span></span>
+        <button id="btn-reload" class="btn" type="button" title="Recargar aplicación">Recargar</button>
+        <a id="btn-external" class="btn primary" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">Abrir en nueva pestaña</a>
+      </div>
+    </header>
+
+    <main class="stage">
+      <iframe id="app-frame" title="Editor titulacionMPA" allow="clipboard-read; clipboard-write"></iframe>
+      <div id="offline-overlay" class="overlay">
+        <div class="card">
+          <h1 id="overlay-title">Conectando con el servidor local...</h1>
+          <p id="overlay-msg">Verificando disponibilidad del túnel de Cloudflare hacia el computador servidor de la GDUR.</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btn-retry" class="btn primary" type="button">Reintentar conexión</button>
+            <a id="btn-overlay-ext" class="btn" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">Abrir enlace directo</a>
+          </div>
+          <div class="meta" id="overlay-meta"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const statusBadge = document.getElementById("status-badge");
+    const statusText = document.getElementById("status-text");
+    const frame = document.getElementById("app-frame");
+    const overlay = document.getElementById("offline-overlay");
+    const overlayTitle = document.getElementById("overlay-title");
+    const overlayMsg = document.getElementById("overlay-msg");
+    const overlayMeta = document.getElementById("overlay-meta");
+    const btnExternal = document.getElementById("btn-external");
+    const btnOverlayExt = document.getElementById("btn-overlay-ext");
+    const btnReload = document.getElementById("btn-reload");
+    const btnRetry = document.getElementById("btn-retry");
+    const instLabel = document.getElementById("inst-label");
+
+    let currentUrl = "";
+
+    function setBadge(kind, text) {
+      statusBadge.className = "badge " + kind;
+      statusText.textContent = text;
+    }
+
+    async function checkReachable(url) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      try {
+        await fetch(url, { mode: "no-cors", cache: "no-store", signal: controller.signal });
+        return true;
+      } catch (_) {
+        return false;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function init() {
+      setBadge("warn", "Conectando...");
+      overlay.classList.remove("hidden");
+      overlayTitle.textContent = "Conectando con el servidor local...";
+      overlayMsg.textContent = "Leyendo configuración del túnel Cloudflare.";
+
+      try {
+        const res = await fetch("./config.json?t=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) throw new Error("No se pudo leer config.json");
+        const cfg = await res.json();
+
+        if (cfg.institution) instLabel.textContent = cfg.institution;
+        currentUrl = (cfg.serverUrl || "").trim();
+
+        if (!currentUrl) {
+          setBadge("err", "Sin URL configurada");
+          overlayTitle.textContent = "Servidor aún no iniciado";
+          overlayMsg.innerHTML = "Ejecuta <code>deploy\\INICIAR_SERVIDOR_MPA.bat</code> (o <code>deploy/lanzar_con_cloudflare.ps1</code>) en el computador servidor para iniciar la app Shiny y publicar la URL del túnel en <code>docs/config.json</code>.";
+          overlayMeta.textContent = "Repositorio: gduranta/titulacionMPA";
+          return;
+        }
+
+        btnExternal.href = currentUrl;
+        btnExternal.setAttribute("aria-disabled", "false");
+        btnOverlayExt.href = currentUrl;
+        btnOverlayExt.setAttribute("aria-disabled", "false");
+
+        const alive = await checkReachable(currentUrl);
+        if (!alive) {
+          setBadge("err", "Servidor fuera de línea");
+          overlayTitle.textContent = "El servidor local no responde";
+          overlayMsg.innerHTML = "El computador servidor de la GDUR parece apagado o el túnel de Cloudflare se cerró. Inicia nuevamente <code>deploy\\INICIAR_SERVIDOR_MPA.bat</code> en el equipo anfitrión.";
+          overlayMeta.textContent = "Última URL registrada: " + currentUrl + (cfg.updatedAt ? " · Actualizado: " + cfg.updatedAt : "");
+          return;
+        }
+
+        setBadge("ok", "En línea (Cloudflare)");
+        frame.src = currentUrl;
+        overlay.classList.add("hidden");
+        overlayMeta.textContent = "Conectado a: " + currentUrl;
+      } catch (err) {
+        setBadge("err", "Error de configuración");
+        overlayTitle.textContent = "No se pudo cargar la configuración";
+        overlayMsg.textContent = err.message || "Error inesperado al consultar config.json.";
+      }
+    }
+
+    btnReload.addEventListener("click", () => {
+      if (currentUrl) {
+        frame.src = currentUrl;
+      } else {
+        init();
+      }
+    });
+    btnRetry.addEventListener("click", init);
+
+    init();
+  </script>
+</body>
+</html>
