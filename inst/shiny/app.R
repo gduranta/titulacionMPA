@@ -210,6 +210,46 @@ ui <- bslib::page_navbar(
       .shiny-input-container {
         width: 100% !important;
       }
+      .panel-izq-scroll {
+        height: calc(100vh - 82px);
+        overflow-y: auto;
+        padding-right: 6px;
+      }
+      .panel-der-preview {
+        height: calc(100vh - 82px);
+        display: flex;
+        flex-direction: column;
+      }
+      .panel-der-preview .card-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .visor-pdf-wrap {
+        flex: 1 1 auto;
+        min-height: 360px;
+        display: flex;
+        flex-direction: column;
+      }
+      .visor-pdf-wrap iframe {
+        flex: 1 1 auto;
+        width: 100%;
+        height: 100% !important;
+        min-height: 360px;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+      }
+      @media (max-width: 991.98px) {
+        .panel-izq-scroll, .panel-der-preview {
+          height: auto;
+          overflow-y: visible;
+        }
+        .visor-pdf-wrap iframe {
+          height: 600px !important;
+        }
+      }
     "))
   ),
 
@@ -220,49 +260,61 @@ ui <- bslib::page_navbar(
     title = "Tablero de Ingreso y Generación",
     icon = shiny::icon("table-columns"),
 
-    # Barra superior de ancho completo: Excel Maestro + Selector de Predio
-    bslib::card(
-      class = "mb-2",
-      bslib::layout_columns(
-        col_widths = c(4, 5, 3),
-        shiny::div(
-          shiny::fileInput(
-            "archivo_excel_upload",
-            "1. Cargar Excel Maestro (.xlsx)",
-            accept = c(".xlsx"),
-            buttonLabel = "Subir .xlsx",
-            placeholder = "Usando archivo del servidor",
-            width = "100%"
-          ),
-          shiny::div(
-            class = "small text-muted",
-            style = "margin-top: -10px;",
-            shiny::textOutput("lbl_excel_actual", inline = TRUE)
-          )
-        ),
-        shiny::selectizeInput(
-          "dash_cargar_lote",
-          "2. Buscar / Seleccionar Predio (Mz - Lote - Posesionario)",
-          choices = c("-- Nuevo Predio --" = "__NUEVO__"),
-          options = list(placeholder = "Escriba Mz, Lote o nombre..."),
-          width = "100%"
-        ),
-        shiny::div(
-          style = "margin-top: 30px;",
-          bslib::layout_columns(
-            col_widths = c(6, 6),
-            shiny::actionButton("btn_nuevo_predio", "Nuevo", icon = shiny::icon("plus"), class = "btn-outline-secondary w-100"),
-            shiny::downloadButton("btn_descargar_excel", "Excel", class = "btn-outline-success w-100")
-          )
-        )
-      )
-    ),
-
     bslib::layout_columns(
       col_widths = c(6, 6),
 
-      # Columna Izquierda (50%): Pestañas amplias para capturar todos los datos
+      # Columna Izquierda (50%): Carga, Filtro Mz/Lote, Formulario con Scroll
       shiny::div(
+        class = "panel-izq-scroll",
+
+        bslib::card(
+          class = "mb-2",
+          bslib::card_header("Carga de Excel Maestro y Filtro de Predios"),
+          bslib::layout_columns(
+            col_widths = c(7, 5),
+            shiny::div(
+              shiny::fileInput(
+                "archivo_excel_upload",
+                "1. Cargar Excel Maestro (.xlsx)",
+                accept = c(".xlsx"),
+                buttonLabel = "Subir .xlsx",
+                placeholder = "Usando archivo del servidor",
+                width = "100%"
+              ),
+              shiny::div(
+                class = "small text-muted",
+                style = "margin-top: -10px;",
+                shiny::textOutput("lbl_excel_actual", inline = TRUE)
+              )
+            ),
+            shiny::div(
+              style = "margin-top: 30px;",
+              bslib::layout_columns(
+                col_widths = c(6, 6),
+                shiny::actionButton("btn_nuevo_predio", "Nuevo", icon = shiny::icon("plus"), class = "btn-outline-secondary w-100"),
+                shiny::downloadButton("btn_descargar_excel", "Excel", class = "btn-outline-success w-100")
+              )
+            )
+          ),
+          shiny::hr(class = "my-2"),
+          bslib::layout_columns(
+            col_widths = c(4, 4, 4),
+            shiny::textInput("filtro_mz", "Filtrar Manzana (MZ)", "", placeholder = "Ej: A, B, C"),
+            shiny::textInput("filtro_lote", "Filtrar Lote", "", placeholder = "Ej: 1, 12"),
+            shiny::div(
+              style = "margin-top: 31px;",
+              shiny::actionButton("btn_limpiar_filtro", "Limpiar filtro", icon = shiny::icon("eraser"), class = "btn-outline-secondary w-100")
+            )
+          ),
+          shiny::selectizeInput(
+            "dash_cargar_lote",
+            "2. Seleccionar Predio (Mz - Lote - Posesionario)",
+            choices = c("-- Nuevo Predio --" = "__NUEVO__"),
+            options = list(placeholder = "Escriba Mz, Lote o nombre..."),
+            width = "100%"
+          )
+        ),
+
         bslib::navset_card_tab(
           id = "tabs_formulario",
           bslib::nav_panel(
@@ -352,6 +404,7 @@ ui <- bslib::page_navbar(
 
       # Columna Derecha (50%): Selector de Documento + Vista Previa PDF + Exportación
       bslib::card(
+        class = "panel-der-preview",
         bslib::card_header("Vista Previa y Generación de Documentos (Typst)"),
         bslib::layout_columns(
           col_widths = c(5, 4, 3),
@@ -368,8 +421,11 @@ ui <- bslib::page_navbar(
           shiny::actionButton("btn_dash_export_todos", "Generar los 5 Documentos (PDF)", icon = shiny::icon("layer-group"), class = "btn-warning w-100")
         ),
         shiny::hr(class = "my-2"),
-        shiny::uiOutput("dash_visor_pdf"),
-        shiny::verbatimTextOutput("dash_estado")
+        shiny::div(
+          class = "visor-pdf-wrap",
+          shiny::uiOutput("dash_visor_pdf", style = "flex: 1 1 auto; display: flex; flex-direction: column;")
+        ),
+        shiny::div(class = "mt-2", shiny::verbatimTextOutput("dash_estado"))
       )
     )
   ),
@@ -490,16 +546,56 @@ server <- function(input, output, session) {
     }
   )
 
-  # Sincronizar selectores de lotes cuando cambia rv$df
+  # Sincronizar selectores de lotes cuando cambia rv$df o los filtros de Mz/Lote
   shiny::observe({
     df <- rv$df
     ids <- paste0(toupper(df$mz), "_", df$lote)
     etiquetas <- paste0("Mz. ", df$mz, " - Lt. ", df$lote, ifelse(nzchar(df$t1_nombre), paste0(" | ", df$t1_nombre), ""))
     choices_editor <- stats::setNames(ids, etiquetas)
     shiny::updateSelectInput(session, "lote_id", choices = choices_editor, selected = if (length(choices_editor) > 0L) choices_editor[[1L]] else NULL)
+  })
 
-    choices_dash <- c("-- Nuevo Predio --" = "__NUEVO__", choices_editor)
-    shiny::updateSelectizeInput(session, "dash_cargar_lote", choices = choices_dash, server = FALSE)
+  shiny::observe({
+    df <- rv$df
+    mz_q <- toupper(trimws(if (is.null(input$filtro_mz)) "" else input$filtro_mz))
+    lt_q <- toupper(trimws(if (is.null(input$filtro_lote)) "" else input$filtro_lote))
+
+    df_filt <- df
+    if (nzchar(mz_q)) {
+      df_filt <- df_filt[toupper(trimws(as.character(df_filt$mz))) == mz_q |
+                           grepl(mz_q, toupper(trimws(as.character(df_filt$mz))), fixed = TRUE), , drop = FALSE]
+    }
+    if (nzchar(lt_q)) {
+      df_filt <- df_filt[toupper(trimws(as.character(df_filt$lote))) == lt_q, , drop = FALSE]
+    }
+
+    ids_filt <- paste0(toupper(df_filt$mz), "_", df_filt$lote)
+    etiq_filt <- paste0("Mz. ", df_filt$mz, " - Lt. ", df_filt$lote, ifelse(nzchar(df_filt$t1_nombre), paste0(" | ", df_filt$t1_nombre), ""))
+    choices_dash <- c("-- Nuevo Predio --" = "__NUEVO__", stats::setNames(ids_filt, etiq_filt))
+
+    selected_val <- NULL
+    if (nzchar(mz_q) && nzchar(lt_q) && nrow(df_filt) > 0L) {
+      exact_idx <- which(toupper(trimws(as.character(df_filt$mz))) == mz_q &
+                         toupper(trimws(as.character(df_filt$lote))) == lt_q)
+      if (length(exact_idx) > 0L) {
+        selected_val <- ids_filt[exact_idx[1L]]
+      } else {
+        selected_val <- ids_filt[1L]
+      }
+    }
+
+    shiny::updateSelectizeInput(
+      session,
+      "dash_cargar_lote",
+      choices = choices_dash,
+      selected = selected_val,
+      server = FALSE
+    )
+  })
+
+  shiny::observeEvent(input$btn_limpiar_filtro, {
+    shiny::updateTextInput(session, "filtro_mz", value = "")
+    shiny::updateTextInput(session, "filtro_lote", value = "")
   })
 
   # ============================================================================
