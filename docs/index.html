@@ -206,9 +206,10 @@
         }
 
         setBadge("ok", "En línea (Cloudflare)");
-        frame.src = currentUrl;
-        overlay.classList.add("hidden");
+        overlayTitle.textContent = "Servidor en línea — Abriendo aplicación...";
+        overlayMsg.innerHTML = "Redirigiendo al editor <strong>titulacionMPA</strong> en Cloudflare Tunnel. Si no redirige automáticamente, haz clic en <strong>Abrir en nueva pestaña</strong>.";
         overlayMeta.textContent = "Conectado a: " + currentUrl;
+        window.location.replace(currentUrl);
       } catch (err) {
         setBadge("err", "Error de configuración");
         overlayTitle.textContent = "No se pudo cargar la configuración";

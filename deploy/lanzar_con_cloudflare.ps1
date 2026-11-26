@@ -3,12 +3,91 @@ param(
   [string]$ExcelPath = "",
   [string]$TunnelName = "",
   [string]$PublicUrl = "",
-  [bool]$AutoPush = $true
+  [bool]$AutoPush = $true,
+  [switch]$Stop,
+  [switch]$Status
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $RepoRoot
+$PidFile = Join-Path $env:TEMP "titulacionMPA_pids.json"
+
+function Get-ServiceProcesses {
+  $pids = @()
+  if (Test-Path $PidFile) {
+    try {
+      $info = Get-Content $PidFile -Raw | ConvertFrom-Json
+      if ($info.rPid) { $pids += [int]$info.rPid }
+      if ($info.cfPid) { $pids += [int]$info.cfPid }
+    } catch {}
+  }
+
+  # Respaldo: detectar procesos escuchando en el puerto o cloudflared apuntando al puerto
+  try {
+    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    foreach ($c in $conns) {
+      if ($c.OwningProcess -gt 0) { $pids += [int]$c.OwningProcess }
+    }
+  } catch {}
+
+  try {
+    $cfProcs = Get-CimInstance Win32_Process -Filter "Name = 'cloudflared.exe'" -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandLine -match "127\.0\.0\.1:$Port" -or ($TunnelName -and $_.CommandLine -match [regex]::Escape($TunnelName)) }
+    foreach ($p in $cfProcs) {
+      $pids += [int]$p.ProcessId
+    }
+  } catch {}
+
+  $unique = $pids | Select-Object -Unique
+  $active = @()
+  foreach ($procId in $unique) {
+    $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+    if ($p) { $active += $p }
+  }
+  return $active
+}
+
+function Stop-MpaService {
+  $active = Get-ServiceProcesses
+  if ($active.Count -eq 0) {
+    Write-Host "[Estado] No hay procesos activos de titulacionMPA en el puerto $Port." -ForegroundColor Yellow
+  } else {
+    foreach ($p in $active) {
+      Write-Host "[Deteniendo] $($p.ProcessName) (PID $($p.Id))..." -ForegroundColor Yellow
+      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "[OK] Servicio detenido correctamente." -ForegroundColor Green
+  }
+  if (Test-Path $PidFile) { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
+}
+
+function Show-MpaStatus {
+  $active = Get-ServiceProcesses
+  if ($active.Count -eq 0) {
+    Write-Host "[Estado] Servicio DETENIDO (puerto $Port libre)." -ForegroundColor Yellow
+  } else {
+    Write-Host "[Estado] Servicio ACTIVO en puerto ${Port}:" -ForegroundColor Green
+    foreach ($p in $active) {
+      Write-Host "  - $($p.ProcessName) (PID $($p.Id))"
+    }
+  }
+}
+
+if ($Stop) {
+  Stop-MpaService
+  exit 0
+}
+
+if ($Status) {
+  Show-MpaStatus
+  exit 0
+}
+
+function Save-PidFile([int]$RPid, [int]$CfPid) {
+  $obj = @{ rPid = $RPid; cfPid = $CfPid; port = $Port }
+  [System.IO.File]::WriteAllText($PidFile, ($obj | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
+}
 
 function Find-Rscript {
   $cmd = Get-Command Rscript -ErrorAction SilentlyContinue
@@ -49,6 +128,13 @@ function Update-PagesConfig([string]$Url) {
   }
 }
 
+$existing = Get-ServiceProcesses
+if ($existing.Count -gt 0) {
+  Write-Host "Ya existe una instancia activa. Deteniéndola antes de reiniciar..." -ForegroundColor Yellow
+  Stop-MpaService
+  Start-Sleep -Milliseconds 500
+}
+
 $RscriptBin = Find-Rscript
 $CloudflaredBin = Find-Cloudflared
 
@@ -66,6 +152,8 @@ $rProc = Start-Process -FilePath $RscriptBin `
   -RedirectStandardError $rErr `
   -NoNewWindow -PassThru
 
+Save-PidFile -RPid $rProc.Id -CfPid 0
+
 try {
   $ready = $false
   for ($i = 0; $i -lt 40; $i++) {
@@ -82,15 +170,25 @@ try {
   if (-not $ready) {
     throw "Tiempo de espera agotado esperando a Shiny en http://127.0.0.1:$Port"
   }
-  Write-Host "[Shiny] Servidor listo en http://127.0.0.1:$Port" -ForegroundColor Green
+  Write-Host "[Shiny] Servidor listo en http://127.0.0.1:$Port (PID $($rProc.Id))" -ForegroundColor Green
 
   if ($TunnelName) {
     Write-Host "=== 2. Iniciando Cloudflare Named Tunnel '$TunnelName' ===" -ForegroundColor Cyan
     if ($PublicUrl) { Update-PagesConfig -Url $PublicUrl }
-    & $CloudflaredBin tunnel --no-autoupdate run $TunnelName
+    $cfProc = Start-Process -FilePath $CloudflaredBin `
+      -ArgumentList @("tunnel", "--no-autoupdate", "run", $TunnelName) `
+      -NoNewWindow -PassThru
+    Save-PidFile -RPid $rProc.Id -CfPid $cfProc.Id
+    try {
+      Wait-Process -Id $cfProc.Id
+    } finally {
+      if ($cfProc -and -not $cfProc.HasExited) {
+        Stop-Process -Id $cfProc.Id -Force -ErrorAction SilentlyContinue
+      }
+    }
   } else {
     Write-Host "=== 2. Iniciando Cloudflare Quick Tunnel hacia http://127.0.0.1:$Port ===" -ForegroundColor Cyan
-    Write-Host "Presiona Ctrl+C para detener el servidor y el túnel." -ForegroundColor Yellow
+    Write-Host "Presiona Ctrl+C o usa la opción 'Detener servicio' del lanzador para cerrar." -ForegroundColor Yellow
 
     $cfErr = Join-Path $env:TEMP "titulacionMPA_cloudflared.log"
     if (Test-Path $cfErr) { Remove-Item $cfErr -Force }
@@ -98,6 +196,8 @@ try {
     $cfProc = Start-Process -FilePath $CloudflaredBin `
       -ArgumentList @("tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:$Port", "--logfile", $cfErr) `
       -NoNewWindow -PassThru
+
+    Save-PidFile -RPid $rProc.Id -CfPid $cfProc.Id
 
     try {
       $tunnelUrl = ""
@@ -133,4 +233,5 @@ try {
     Write-Host "Deteniendo servidor R..." -ForegroundColor Yellow
     Stop-Process -Id $rProc.Id -Force -ErrorAction SilentlyContinue
   }
+  if (Test-Path $PidFile) { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
 }
