@@ -1,0 +1,368 @@
+---
+lang: es
+format:
+  docx:
+    reference-doc: ../formatos/ref_titulo.docx
+  pdf:
+    documentclass: article
+    papersize: a4
+    geometry: top=3.0cm, bottom=1.5cm, left=3.0cm, right=1.75cm, footskip=0.6cm
+    fontsize: 11pt
+    pdf-engine: xelatex
+    include-in-header: header_titulo.tex
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  config_rds: ""
+  mz: "A"
+  lote: "1"
+  correlativo: ""
+  num_resolucion: ""
+  fecha_resolucion: "25 de noviembre del 2026"
+  nombre_alcalde: "Sr. ELIAS CCOLLATUPA CHACON"
+  dni_alcalde: "25315115"
+  domicilio_legal: "AV. Los Andes s/n Izcuchaca- Anta"
+  anio: "2026"
+  fecha_emision: ""
+---
+
+```{r}
+if (!nzchar(trimws(as.character(params$config_rds))) || !file.exists(params$config_rds)) {
+  stop("Debe ejecutar desde titulacionMPA pasando config_rds.")
+}
+config <- readRDS(params$config_rds)
+source(file.path(config$pkg_root, "R", "00_config.R"))
+source(file.path(config$pkg_root, "R", "01_extractor_memoria.R"))
+source(file.path(config$pkg_root, "R", "02_extractor_excel.R"))
+source(file.path(config$pkg_root, "R", "03_transformador.R"))
+df_all <- obtener_dataset_proyecto(config)
+df <- df_all
+
+sector_nombre    <- config$meta$NOMBRE_SECTOR
+partida_matriz   <- config$meta$PARTIDA_MATRIZ
+res_lotizacion   <- config$meta$RES_APROBACION_LOTIZACION
+fecha_lotizacion <- config$meta$FECHA_APROBACION_LOTIZACION
+ordenanza_tupa   <- config$meta$ORDENANZA_TUPA
+alcalde_nombre   <- config$meta$ALCALDE_NOMBRE
+alcalde_dni      <- config$meta$ALCALDE_DNI
+domicilio_legal  <- config$meta$DOMICILIO_LEGAL
+gerente_mun      <- config$meta$GERENTE_MUNICIPAL
+asesor_leg       <- config$meta$ASESOR_LEGAL
+gerente_gdur     <- config$meta$GERENTE_GDUR
+subgerente_sg    <- config$meta$SUBGERENTE_SGPUAT
+
+
+mz_param <- toupper(trimws(as.character(params$mz)))
+lote_param <- trimws(as.character(params$lote))
+
+item <- dplyr::filter(df_all, toupper(.data$mz) == mz_param, as.character(.data$lote) == lote_param)
+if (nrow(item) != 1) stop(paste("Se esperaba un predio para Mz.", mz_param, "Lote", lote_param))
+item <- item[1, , drop = FALSE]
+
+mz <- as.character(item$mz[[1]])
+lote <- as.character(item$lote[[1]])
+partida <- as.character(item$partida[[1]])
+expediente <- as.character(item$expediente[[1]])
+
+extraer_num_doc <- function(txt, default_val = "XXX") {
+  txt <- as.character(txt)
+  if (is.na(txt) || !nzchar(trimws(txt))) return(default_val)
+  m <- stringr::str_match(txt, "[Nn][°ºo.]+\\s*([0-9A-Za-z]+)")[, 2]
+  if (is.na(m)) m <- stringr::str_extract(txt, "[0-9]+")
+  if (is.na(m) || m == "2026") {
+    if (grepl("X", txt, ignore.case = TRUE)) "XXX" else if (nzchar(trimws(txt))) trimws(txt) else default_val
+  } else {
+    m
+  }
+}
+
+# Correlativo del título de propiedad
+corr_param <- trimws(as.character(params$correlativo))
+corr <- if (nzchar(corr_param)) {
+  corr_param
+} else {
+  extraer_num_doc(item$num_titulo_propiedad[[1]], default_val = "XXX")
+}
+
+# Número de resolución de alcaldía
+res_param <- trimws(as.character(params$num_resolucion))
+num_res <- if (nzchar(res_param)) {
+  res_param
+} else {
+  extraer_num_doc(item$num_resolucion_sg[[1]], default_val = "XXX")
+}
+
+fecha_res <- if (nzchar(trimws(as.character(params$fecha_resolucion)))) {
+  params$fecha_resolucion
+} else {
+  "25 de noviembre del 2026"
+}
+
+# Alcalde y domicilio institucional
+alcalde <- if (nzchar(trimws(as.character(params$nombre_alcalde)))) params$nombre_alcalde else "ELIAS CCOLLATUPA CHACON"
+alcalde <- sub("^Sr\\.?\\s*", "", alcalde)
+dni_alc <- if (nzchar(trimws(as.character(params$dni_alcalde)))) params$dni_alcalde else "25315115"
+dom_leg <- if (nzchar(trimws(as.character(params$domicilio_legal)))) params$domicilio_legal else "AV. Los Andes s/n Izcuchaca- Anta"
+
+# Año
+anio_val <- trimws(as.character(params$anio))
+if (!nzchar(anio_val) || is.na(anio_val)) anio_val <- "2026"
+
+# Fecha de suscripción
+f_emision <- params$fecha_emision
+f_date <- if (nzchar(as.character(f_emision))) suppressWarnings(as.Date(f_emision)) else as.Date("2026-11-25")
+if (is.na(f_date)) f_date <- as.Date("2026-11-25")
+dia <- format(f_date, "%d")
+meses <- c("enero", "febrero", "marzo", "abril", "mayo", "junio",
+           "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+mes <- meses[as.integer(format(f_date, "%m"))]
+numero_a_letras <- function(n) {
+  if (n == 2026L) "dos mil veintiséis"
+  else if (n == 2025L) "dos mil veinticinco"
+  else if (n == 2024L) "dos mil veinticuatro"
+  else as.character(n)
+}
+anio_letras <- numero_a_letras(as.integer(format(f_date, "%Y")))
+
+# Titulares y estados civiles
+t1_nom <- trimws(as.character(item$t1_nombre[[1]]))
+t1_dni <- trimws(as.character(item$t1_dni[[1]]))
+t2_nom <- trimws(as.character(item$t2_nombre[[1]]))
+t2_dni <- trimws(as.character(item$t2_dni[[1]]))
+es_par <- isTRUE(item$es_pareja[[1]])
+fem1 <- isTRUE(item$fem1[[1]])
+fem2 <- isTRUE(item$fem2[[1]])
+est_civ <- toupper(trimws(as.character(item$estado_civil[[1]])))
+
+formatear_estado_civil_singular <- function(est, es_fem) {
+  est <- toupper(trimws(as.character(est)))
+  if (grepl("CASAD", est)) {
+    if (es_fem) "casada" else "casado"
+  } else if (grepl("CONVIV", est)) {
+    "conviviente"
+  } else if (grepl("VIUD", est)) {
+    if (es_fem) "viuda" else "viudo"
+  } else if (grepl("DIVORC", est)) {
+    if (es_fem) "divorciada" else "divorciado"
+  } else {
+    if (es_fem) "soltera" else "soltero"
+  }
+}
+
+estado_tit1 <- formatear_estado_civil_singular(est_civ, fem1)
+estado_tit2 <- formatear_estado_civil_singular(est_civ, fem2)
+estado_titulares <- if (es_par) {
+  if (grepl("CASAD", est_civ)) "casados" else if (grepl("CONVIV", est_civ)) "convivientes" else tolower(est_civ)
+} else {
+  estado_tit1
+}
+
+unir_y_tit <- function(vec) {
+  vec <- vec[nzchar(vec)]
+  n <- length(vec)
+  if (n == 0L) return("")
+  if (n == 1L) return(vec[1])
+  if (n == 2L) return(paste(vec[1], "y", vec[2]))
+  paste0(paste(vec[-n], collapse = ", "), " y ", vec[n])
+}
+
+ben_df <- if ("beneficiarios" %in% names(item) && length(item$beneficiarios) > 0 && is.data.frame(item$beneficiarios[[1]])) {
+  item$beneficiarios[[1]]
+} else {
+  NULL
+}
+n_tit <- if (!is.null(ben_df)) nrow(ben_df) else if (es_par) 2L else 1L
+
+if (!is.null(ben_df) && n_tit >= 3L) {
+  partes_p1 <- purrr::map_chr(seq_len(n_tit), function(k) {
+    don_k <- if (isTRUE(ben_df$es_fem[k])) "Doña" else "Don"
+    id_k  <- if (isTRUE(ben_df$es_fem[k])) "Identificada" else "Identificado"
+    ec_k  <- ben_df$est_civ_sing[k]
+    pref_k <- if (k == 1L) "Que" else "que"
+    glue::glue("{pref_k} {don_k}: {ben_df$nombre[k]}, de estado civil: {ec_k} {id_k} con D.N.I N.° {ben_df$dni[k]}")
+  })
+  txt_primero <- glue::glue("{paste(partes_p1, collapse = ', ')} A quienes en lo sucesivo se denominará LOS ADJUDICATARIOS, han demostrado reunir los requisitos que establece el Texto Único de Procedimiento Administrativo (TUPA) de la Municipalidad Provincial de Anta para la adquisición de la Propiedad de la Mz “{mz}” Lote {lote} que poseen, de la {sector_nombre} ubicado en el distrito y provincia de Anta, departamento de Cusco.")
+
+  partes_p4 <- purrr::map_chr(seq_len(n_tit), function(k) {
+    don_k <- if (isTRUE(ben_df$es_fem[k])) "Doña" else "Don"
+    id_k  <- if (isTRUE(ben_df$es_fem[k])) "Identificada" else "Identificado"
+    ec_k  <- ben_df$est_civ_sing[k]
+    glue::glue("{don_k}: {ben_df$nombre[k]} {id_k} con D.N.I N.° {ben_df$dni[k]} de estado civil {ec_k}")
+  })
+  txt_cuarto_tit <- glue::glue("Que, {unir_y_tit(partes_p4)}, han demostrado reunir los requisitos que establece la ley, para la adjudicación de la propiedad del predio del cual se encuentran en condición de posesionarios en predio Lote N.° {lote} de la Manzana “{mz}” de la {sector_nombre} ubicado en el distrito y provincia de Anta, departamento de Cusco.")
+  txt_cuarto_otorga <- "procede otorgarles el presente Título"
+  txt_septimo_adj <- "a nombre de los adjudicatarios"
+  txt_octavo_tit <- "de los titulares"
+} else if (es_par) {
+  don1 <- if (fem1) "Doña" else "Don"
+  don2 <- if (fem2) "Doña" else "Don"
+  id1 <- if (fem1) "Identificada" else "Identificado"
+  id2 <- if (fem2) "Identificada" else "Identificado"
+  txt_primero <- glue::glue("Que {don1}: {t1_nom}, de estado civil: {estado_tit1} {id1} con D.N.I N.° {t1_dni}, que {don2}: {t2_nom}, de estado civil: {estado_tit2} {id2} con D.N.I N.° {t2_dni} A quienes en lo sucesivo se denominará LOS ADJUDICATARIOS, han demostrado reunir los requisitos que establece el Texto Único de Procedimiento Administrativo (TUPA) de la Municipalidad Provincial de Anta para la adquisición de la Propiedad de la Mz “{mz}” Lote {lote} que poseen, de la {sector_nombre} ubicado en el distrito y provincia de Anta, departamento de Cusco.")
+  txt_cuarto_tit <- glue::glue("Que, {don1}: {t1_nom} {id1} con D.N.I N.° {t1_dni}, y que {don2}: {t2_nom} {id2} con D.N.I N.° {t2_dni}, de estado civil {estado_titulares}, han demostrado reunir los requisitos que establece la ley, para la adjudicación de la propiedad del predio del cual se encuentran en condición de posesionarios en predio Lote N.° {lote} de la Manzana “{mz}” de la {sector_nombre} ubicado en el distrito y provincia de Anta, departamento de Cusco.")
+  txt_cuarto_otorga <- "procede otorgarles el presente Título"
+  txt_septimo_adj <- "a nombre de los adjudicatarios"
+  txt_octavo_tit <- "de los titulares"
+} else {
+  don1 <- if (fem1) "Doña" else "Don"
+  id1 <- if (fem1) "Identificada" else "Identificado"
+  adj_nom <- if (fem1) "LA ADJUDICATARIA" else "EL ADJUDICATARIO"
+  txt_primero <- glue::glue("Que {don1}: {t1_nom}, de estado civil: {estado_tit1} {id1} con D.N.I N.° {t1_dni} A quien en lo sucesivo se denominará {adj_nom}, ha demostrado reunir los requisitos que establece el Texto Único de Procedimiento Administrativo (TUPA) de la Municipalidad Provincial de Anta para la adquisición de la Propiedad de la Mz “{mz}” Lote {lote} que posee, de la {sector_nombre} ubicado en el distrito y provincia de Anta, departamento de Cusco.")
+  pos_cond <- if (fem1) "posesionaria" else "posesionario"
+  txt_cuarto_tit <- glue::glue("Que, {don1}: {t1_nom} {id1} con D.N.I N.° {t1_dni}, de estado civil {estado_tit1}, ha demostrado reunir los requisitos que establece la ley, para la adjudicación de la propiedad del predio del cual se encuentra en condición de {pos_cond} en predio Lote N.° {lote} de la Manzana “{mz}” de la {sector_nombre} ubicado en el distrito y provincia de Anta, departamento de Cusco.")
+  txt_cuarto_otorga <- "procede otorgarle el presente Título"
+  txt_septimo_adj <- if (fem1) "a nombre de la adjudicataria" else "a nombre del adjudicatario"
+  txt_octavo_tit <- if (fem1) "de la titular" else "del titular"
+}
+
+# Medidas y Linderos
+fmt_num <- function(x) if (is.na(x) || !nzchar(as.character(x))) "" else format(as.numeric(x), nsmall = 2, decimal.mark = ".")
+area_val <- if (nzchar(as.character(item$area_memoria[[1]])) && as.numeric(item$area_memoria[[1]]) > 0) item$area_memoria[[1]] else item$area_excel[[1]]
+perim_val <- if (nzchar(as.character(item$perimetro_memoria[[1]])) && as.numeric(item$perimetro_memoria[[1]]) > 0) item$perimetro_memoria[[1]] else item$perimetro_excel[[1]]
+area <- fmt_num(area_val)
+perimetro <- fmt_num(perim_val)
+
+formatear_lindero_carmen <- function(linea, prefijo_esperado) {
+  if (is.null(linea) || is.na(linea) || !nzchar(trimws(as.character(linea)))) return(paste0(prefijo_esperado, " : "))
+  linea <- trimws(as.character(linea))
+  cuerpo <- sub("^Por (?:el|la) (?:frente|fondo|derecha|izquierda|costado derecho|costado izquierdo)\\s*:\\s*", "", linea, ignore.case = TRUE)
+  paste0(prefijo_esperado, " : ", cuerpo)
+}
+
+txt_frente <- formatear_lindero_carmen(item$linderos_frente[[1]], "Por el frente")
+txt_fondo <- formatear_lindero_carmen(item$linderos_fondo[[1]], "Por el fondo")
+txt_derecha <- formatear_lindero_carmen(item$linderos_derecha[[1]], "Por la derecha")
+txt_izquierda <- formatear_lindero_carmen(item$linderos_izquierda[[1]], "Por la izquierda")
+```
+
+::: {.content-visible when-format="pdf"}
+\begin{center}
+{\fontsize{14pt}{17pt}\selectfont \textbf{\uline{TÍTULO DE PROPIEDAD N. º`r corr`-`r anio_val` –A-MPA-C}}}
+\end{center}
+\vspace{0.4cm}
+:::
+
+::: {.content-visible when-format="docx"}
+[**TÍTULO DE PROPIEDAD N. º`r corr`-`r anio_val` –A-MPA-C**]{custom-style="Title"}
+
+&nbsp;
+:::
+
+LA MUNICIPALIDAD PROVINCIAL DE ANTA, representada por su Alcalde Sr. `r alcalde`, identificado con D.N.I N.º `r dni_alc`, con domicilio legal `r dom_leg`, en virtud de lo dispuesto en la Ley N.° 27972 "Ley Orgánica de Municipalidades" y la Ley N.° 28687 "Ley de Desarrollo y Complementaria de Formalización de la Propiedad Informal, Acceso al Suelo y Dotación de Servicios Básicos", y en uso de sus facultades de formalización de la Propiedad Informal; procede a la Declaración de Propiedad por FORMALIZACIÓN DE PREDIO INICIADO POR LA MUNICIPALIDAD PROVINCIAL DE ANTA, por lo que se emite el presente TÍTULO DE PROPIEDAD, en los términos y condiciones siguientes:
+
+**PRIMERO.** - `r txt_primero`
+
+**SEGUNDO.** - La Municipalidad Provincial de Anta, es propietaria de la superficie del LOTE N.° `r lote` de la Manzana “`r mz`” de la `r sector_nombre` ubicado en el distrito y provincia de ANTA, departamento de CUSCO, tiene acreditado e inscrito su dominio en la Partida Electrónica N.° `r partida` del Registro de Propiedad Inmueble de la Zona Registral N.° X de la Superintendencia Nacional de los Registros Públicos – Oficina Cusco, conforme al contenido de la Resolución de Alcaldía N.º`r num_res`, de fecha `r fecha_res`.
+
+**TERCERO.** - En virtud a lo dispuesto en la Ley N.° 27972 – Ley Orgánica de Municipalidades, Ley N.º 28687- “Ley de Desarrollo y Complementaria de Formalización de la Propiedad Informal, Acceso al Suelo y Dotación de Servicios Básicos”, Decreto Supremo N°006-2006-VIVIENDA-Reglamento del Título I de la Ley N°28687, referido a la Formalización de la Propiedad Informal de Terrenos Ocupados por Posesiones Informales, Centros Urbanos Informales y Urbanizaciones Populares, y en aplicación del Decreto Supremo N°004-85.VC, Reglamento de Adjudicación de Terrenos Fiscales para Fines Urbanos, Ley N°31056 y su reglamento D.S. N°002-2021-VIVIENDA, se crea un régimen temporal extraordinario de formalización y titulación de predios urbanos, el cual tiene una vigencia hasta el 31 de diciembre del 2026. Asimismo, mediante la Ley N°32267 amplía por última vez hasta el 31 de diciembre de 2021 los plazos establecidos en las leyes 28687 y 31056 para la formalización de terrenos estatales ocupados por posesiones informales, D.S. N°005-2026-VIVIENDA, Decreto Supremo que modifica el Reglamento del Título I de la Ley N°28687, Ley de desarrollo y complementaria de formalización de la propiedad informal, acceso al suelo y dotación de servicios básicos y que el Texto Único de Procedimientos Administrativos TUPA de la Municipalidad Provincial de Anta, aprobado mediante Ordenanza Municipal N°019-2019-AL-CPA-MPA de fecha 27 de diciembre de 2019; por el cual, la Municipalidad Provincial de Anta, está facultada para legalizar la transferencia de la propiedad de los predios a favor de los solicitantes que reúnan los requisitos de ley. Por lo que emite el presente en los términos y condiciones siguientes.
+
+**CUARTO.** – `r txt_cuarto_tit`
+
+Habiendo cumplido además con los requisitos establecidos por el Texto Único de Procedimiento Administrativo (TUPA) de la Municipalidad Provincial de Anta, por lo que `r txt_cuarto_otorga` correspondiente al predio Lote N.° `r lote` de la Manzana “`r mz`” de la `r sector_nombre` del distrito y provincia de ANTA, departamento de CUSCO, cuyas características se señalan en la cláusula quinta.
+
+**QUINTO.** - El Predio materia de este TÍTULO tiene las siguientes características técnicas:
+
+* Partida Electrónica N.° `r partida`
+* El Predio está ubicado en el Lote N.° `r lote` de la Manzana ”`r mz`”
+* Área del Terreno = `r area` m2
+* Perímetro = `r perimetro` m.
+* Linderos y colindantes:
+
+`r txt_frente`
+
+`r txt_fondo`
+
+`r txt_derecha`
+
+`r txt_izquierda`
+
+**SEXTO.** - Para los efectos legales a que se contrae esta transferencia de predio de terreno, se otorga el presente Título de Propiedad, de conformidad al Expediente Administrativo N.° `r expediente` en el cual solicita FORMALIZACIÓN DE PREDIO.
+
+**SEPTIMO.** - La Transferencia `r txt_septimo_adj` comprende el predio de terreno, con todo y cuanto por derecho sea inherente, sus usos, costumbres y servidumbres, sometiéndose además a las disposiciones legales.
+
+**OCTAVO.** - Conforme a la Ley, es condición indispensable que el inmueble al momento de la adjudicación sea la única propiedad destinada a vivienda o lugar de trabajo `r txt_octavo_tit`. De comprobarse la contravención a la presente, quedará resuelto automáticamente este contrato y en consecuencia el bien inmueble revertirá al dominio de la Municipalidad Provincial De Anta
+
+**NOVENO.** - No habiendo mediado vicio de voluntad que enerven los efectos del presente acto jurídico, ambas partes nos ratificamos en todas y cada una de las precedentes cláusulas, renunciando a cualquier acción y/o excepción derivada de vicio de voluntad dentro o fuera de juicio.
+
+El presente **TÍTULO DE PROPIEDAD** constituye merito suficiente para su inscripción en la Superintendencia Nacional de Registros Públicos Oficina Registral Cusco.
+
+Firmado en la ciudad de Anta a los `r dia` días del mes de `r mes` del `r anio_letras`.
+
+::: {.content-visible when-format="pdf"}
+```{=latex}
+\vspace{1.0cm}
+
+\begin{center}
+\begin{minipage}{0.55\textwidth}
+\centering
+\rule{6.5cm}{0.4pt}\\[0.4em]
+\textbf{ALCALDE}\\[0.2em]
+Municipalidad Provincial De Anta
+\end{minipage}
+\end{center}
+```
+
+```{r}
+#| results: asis
+if (n_tit >= 3L) {
+  for (k in seq(1L, n_tit, by = 2L)) {
+    cat("\\vspace{1.2cm}\n\n")
+    if (k + 1L <= n_tit) {
+      cat(paste0(
+        "\\noindent\\begin{minipage}[t]{0.48\\textwidth}\n\\centering\n\\rule{5.5cm}{0.4pt}\\\\[0.35em]\n\\textbf{TITULAR ", k, "}\n\\end{minipage}\\hfill\n",
+        "\\begin{minipage}[t]{0.48\\textwidth}\n\\centering\n\\rule{5.5cm}{0.4pt}\\\\[0.35em]\n\\textbf{TITULAR ", k + 1L, "}\n\\end{minipage}\n\n"
+      ))
+    } else {
+      cat(paste0(
+        "\\begin{center}\n\\begin{minipage}{0.55\\textwidth}\n\\centering\n\\rule{6.5cm}{0.4pt}\\\\[0.35em]\n\\textbf{TITULAR ", k, "}\n\\end{minipage}\n\\end{center}\n"
+      ))
+    }
+  }
+} else if (es_par) {
+  cat("\\vspace{1.2cm}\n\n")
+  cat("\\noindent\\begin{minipage}[t]{0.48\\textwidth}\n\\centering\n\\rule{5.5cm}{0.4pt}\\\\[0.4em]\n\\textbf{TITULAR 1}\n\\end{minipage}\\hfill\n")
+  cat("\\begin{minipage}[t]{0.48\\textwidth}\n\\centering\n\\rule{5.5cm}{0.4pt}\\\\[0.4em]\n\\textbf{TITULAR 2}\n\\end{minipage}\n")
+} else {
+  cat("\\vspace{1.2cm}\n\n")
+  cat("\\begin{center}\n\\begin{minipage}{0.55\\textwidth}\n\\centering\n\\rule{6.5cm}{0.4pt}\\\\[0.4em]\n\\textbf{TITULAR}\n\\end{minipage}\n\\end{center}\n")
+}
+```
+:::
+
+::: {.content-visible when-format="docx"}
+```{r}
+#| results: asis
+cat("```{=openxml}\n")
+cat("<w:p>\n  <w:pPr>\n    <w:jc w:val=\"center\"/>\n    <w:ind w:left=\"0\" w:right=\"0\" w:firstLine=\"0\"/>\n    <w:spacing w:before=\"500\" w:after=\"80\"/>\n  </w:pPr>\n  <w:r>\n    <w:rPr>\n      <w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/>\n      <w:sz w:val=\"22\"/>\n    </w:rPr>\n    <w:t>_________________________________________</w:t>\n  </w:r>\n</w:p>\n")
+cat("<w:p>\n  <w:pPr>\n    <w:jc w:val=\"center\"/>\n    <w:ind w:left=\"0\" w:right=\"0\" w:firstLine=\"0\"/>\n    <w:spacing w:before=\"0\" w:after=\"40\"/>\n  </w:pPr>\n  <w:r>\n    <w:rPr>\n      <w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/>\n      <w:b/>\n      <w:bCs/>\n      <w:sz w:val=\"22\"/>\n    </w:rPr>\n    <w:t>ALCALDE</w:t>\n  </w:r>\n</w:p>\n")
+cat("<w:p>\n  <w:pPr>\n    <w:jc w:val=\"center\"/>\n    <w:ind w:left=\"0\" w:right=\"0\" w:firstLine=\"0\"/>\n    <w:spacing w:before=\"0\" w:after=\"0\"/>\n  </w:pPr>\n  <w:r>\n    <w:rPr>\n      <w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/>\n      <w:sz w:val=\"22\"/>\n    </w:rPr>\n    <w:t>Municipalidad Provincial De Anta</w:t>\n  </w:r>\n</w:p>\n")
+
+celda_firma_xml <- function(titulo_lbl) {
+  paste0(
+    "<w:tc><w:tcPr><w:tcW w:w=\"4500\" w:type=\"dxa\"/></w:tcPr>",
+    "<w:p><w:pPr><w:jc w:val=\"center\"/><w:ind w:left=\"0\" w:right=\"0\" w:firstLine=\"0\"/><w:spacing w:before=\"500\" w:after=\"80\"/></w:pPr>",
+    "<w:r><w:rPr><w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/><w:sz w:val=\"22\"/></w:rPr><w:t>_______________________________</w:t></w:r></w:p>",
+    "<w:p><w:pPr><w:jc w:val=\"center\"/><w:ind w:left=\"0\" w:right=\"0\" w:firstLine=\"0\"/><w:spacing w:before=\"0\" w:after=\"0\"/></w:pPr>",
+    "<w:r><w:rPr><w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/><w:b/><w:bCs/><w:sz w:val=\"22\"/></w:rPr><w:t>", titulo_lbl, "</w:t></w:r></w:p></w:tc>"
+  )
+}
+
+if (n_tit >= 2L) {
+  cat("<w:tbl>\n  <w:tblPr>\n    <w:tblW w:w=\"0\" w:type=\"auto\"/>\n    <w:jc w:val=\"center\"/>\n    <w:tblBorders>\n      <w:top w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>\n      <w:left w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>\n      <w:bottom w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>\n      <w:right w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>\n      <w:insideH w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>\n      <w:insideV w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>\n    </w:tblBorders>\n  </w:tblPr>\n  <w:tblGrid><w:gridCol w:w=\"4500\"/><w:gridCol w:w=\"4500\"/></w:tblGrid>\n")
+  for (k in seq(1L, n_tit, by = 2L)) {
+    if (k + 1L <= n_tit) {
+      cat("<w:tr>\n", celda_firma_xml(paste("TITULAR", k)), "\n", celda_firma_xml(paste("TITULAR", k + 1L)), "\n</w:tr>\n")
+    } else {
+      cat("<w:tr>\n", celda_firma_xml(paste("TITULAR", k)), "\n<w:tc><w:tcPr><w:tcW w:w=\"4500\" w:type=\"dxa\"/></w:tcPr><w:p/></w:tc>\n</w:tr>\n")
+    }
+  }
+  cat("</w:tbl>\n")
+} else {
+  cat("<w:p>\n  <w:pPr>\n    <w:jc w:val=\"center\"/>\n    <w:ind w:left=\"0\" w:right=\"0\" w:firstLine=\"0\"/>\n    <w:spacing w:before=\"600\" w:after=\"80\"/>\n  </w:pPr>\n  <w:r>\n    <w:rPr>\n      <w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/>\n      <w:sz w:val=\"22\"/>\n    </w:rPr>\n    <w:t>_________________________________________</w:t>\n  </w:r>\n</w:p>\n")
+  cat("<w:p>\n  <w:pPr>\n    <w:jc w:val=\"center\"/>\n    <w:ind w:left=\"0\" w:right=\"0\" w:firstLine=\"0\"/>\n    <w:spacing w:before=\"0\" w:after=\"0\"/>\n  </w:pPr>\n  <w:r>\n    <w:rPr>\n      <w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/>\n      <w:b/>\n      <w:bCs/>\n      <w:sz w:val=\"22\"/>\n    </w:rPr>\n    <w:t>TITULAR</w:t>\n  </w:r>\n</w:p>\n")
+}
+cat("```\n")
+```
+:::

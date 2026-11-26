@@ -1,0 +1,198 @@
+---
+tbl-colwidths: [8, 67, 25]
+format:
+  docx:
+    reference-doc: ../formatos/ref_informe_sgpuat.docx
+  pdf:
+    documentclass: article
+    papersize: a4
+    geometry: top=3.5cm, bottom=2.5cm, left=3.0cm, right=2.5cm, headheight=1.65cm, headsep=0.4cm
+    fontsize: 11pt
+    pdf-engine: xelatex
+    include-in-header: header_sgpuat.tex
+    booktabs: false
+    filters:
+      - informe_borders.lua
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  config_rds: ""
+  mz: "A"
+  lote: "1"
+  num_informe: ""
+  fecha: ""
+  doc_compra_venta: ""
+---
+
+```{r}
+if (!nzchar(trimws(as.character(params$config_rds))) || !file.exists(params$config_rds)) {
+  stop("Debe ejecutar desde titulacionMPA pasando config_rds.")
+}
+config <- readRDS(params$config_rds)
+source(file.path(config$pkg_root, "R", "00_config.R"))
+source(file.path(config$pkg_root, "R", "01_extractor_memoria.R"))
+source(file.path(config$pkg_root, "R", "02_extractor_excel.R"))
+source(file.path(config$pkg_root, "R", "03_transformador.R"))
+df_all <- obtener_dataset_proyecto(config)
+df <- df_all
+
+sector_nombre    <- config$meta$NOMBRE_SECTOR
+partida_matriz   <- config$meta$PARTIDA_MATRIZ
+res_lotizacion   <- config$meta$RES_APROBACION_LOTIZACION
+fecha_lotizacion <- config$meta$FECHA_APROBACION_LOTIZACION
+ordenanza_tupa   <- config$meta$ORDENANZA_TUPA
+alcalde_nombre   <- config$meta$ALCALDE_NOMBRE
+alcalde_dni      <- config$meta$ALCALDE_DNI
+domicilio_legal  <- config$meta$DOMICILIO_LEGAL
+gerente_mun      <- config$meta$GERENTE_MUNICIPAL
+asesor_leg       <- config$meta$ASESOR_LEGAL
+gerente_gdur     <- config$meta$GERENTE_GDUR
+subgerente_sg    <- config$meta$SUBGERENTE_SGPUAT
+
+
+mz_param <- toupper(trimws(as.character(params$mz)))
+lote_param <- trimws(as.character(params$lote))
+
+item <- dplyr::filter(df_all, toupper(.data$mz) == mz_param, as.character(.data$lote) == lote_param)
+if (nrow(item) == 0L) {
+  stop(paste("No se encontró el predio indicado en", sector_nombre, ": Mz.", mz_param, "Lote", lote_param))
+}
+item <- item[1, ]
+
+# Número de informe SGPUAT (extraído de columna "INFORME SUBGERENCIA DE PLANEAMIENTO URBANO" o parámetro)
+num_inf <- trimws(as.character(params$num_informe))
+if (!nzchar(num_inf)) {
+  num_inf <- trimws(as.character(item$num_informe_sgpuat_num))
+}
+if (!nzchar(num_inf)) {
+  num_inf <- "240"
+}
+
+# Fecha del informe
+fecha_doc <- trimws(as.character(params$fecha))
+if (!nzchar(fecha_doc)) {
+  fecha_doc <- "25 de noviembre del 2026"
+}
+
+expediente <- as.character(item$expediente)
+if (is.na(expediente) || !nzchar(trimws(expediente))) {
+  expediente <- "6518-2026"
+}
+
+mz <- item$mz
+lote <- item$lote
+partida <- item$partida
+if (is.na(partida) || !nzchar(trimws(partida))) partida <- "11368545"
+
+area_str <- item$area_formateada
+perim_str <- item$perimetro_formateado
+anio_pos <- item$anio_pos
+
+titulares <- item$titulares_informe
+titular_prin <- item$t1_nombre
+dni_prin <- item$t1_dni
+
+# Contrato de compra-venta opcional (si aplica)
+compra_venta_txt <- trimws(as.character(params$doc_compra_venta))
+if (!nzchar(compra_venta_txt) && mz == "G" && lote == "3") {
+  compra_venta_txt <- "Los administrados, presenta una copia simple de contrato de compra-venta otorgado por el sr. Edwin Pino Almiron a favor de la sra. JULIANA HOLGADO OCSA, de un área de terreno de 215.00 m2, parte integrante del predio Pucrupampa."
+}
+```
+
+::: {.content-visible when-format="docx"}
+::: {custom-style="Title"}
+**INFORME N°`r num_inf`-2026-SGPUAT-GDUR-MPA**
+:::
+:::
+
+::: {.content-visible when-format="pdf"}
+```{=latex}
+\noindent\makebox[\linewidth][c]{\textbf{INFORME N°`r num_inf`-2026-SGPUAT-GDUR-MPA}}
+```
+:::
+
+**A:** `r gerente_gdur`.\
+*GERENTE DE DESARROLLO URBANO Y RURAL.*
+
+**DE:** `r subgerente_sg`.\
+*SUBGERENTE DE PLANEAMIENTO URBANO Y ACONDICIONAMIENTO TERRITORIAL*
+
+**ASUNTO:** REMITO OPINION FAVORABLE DE PROCESO DE FORMALIZACION DE PREDIOS Y SOLICITO OPINION LEGAL PARA SU CONTINUACION DEL PROCESO DE TITULACION DEL PREDIO UBICADO EN LA MZ `r mz` LOTE `r lote` DE LA `r sector_nombre`
+
+**REFERENCIA:** EXP. ADM. N°`r expediente`
+
+**FECHA:** `r fecha_doc`
+
+………………………………………………………………………………………………….
+
+Previo cordial saludo, por el presente tengo el agrado de dirigirme a usted, para remitir el informe respecto a la solicitud de `r item$solicitante_saludo`, `r if (isTRUE(item$es_pareja)) "quienes solicitan" else "quien solicita"` PROCESO PARA LA FORMALIZACIÓN DE PREDIOS de la `r sector_nombre`, ubicado en la Mz `r mz` Lote `r lote`. Al respecto se informa lo siguiente:
+
+### **ANTECEDENTES**
+
+En virtud a lo dispuesto en la Ley N°27972 – Ley Orgánica de Municipalidades, Ley N.º 28687- “Ley de Desarrollo y Complementaria de Formalización de la Propiedad Informal, Acceso al Suelo y Dotación de Servicios Básicos”, Decreto Supremo N°006-2006-VIVIENDA-Reglamento del Título I de la Ley N°28687, referido a la Formalización de la Propiedad Informal de Terrenos Ocupados por Posesiones Informales, Centros Urbanos Informales y Urbanizaciones Populares, y en aplicación del Decreto Supremo N°004-85.VC, Reglamento de Adjudicación de Terrenos Fiscales para Fines Urbanos, y que el Texto Único de Procedimientos Administrativos TUPA de la Municipalidad Provincial de Anta, aprobado mediante Ordenanza Municipal N°019-2019-AL-CPA-MPA de fecha 27 de diciembre de 2019; por el cual, la Municipalidad Provincial De Anta, está facultada para legalizar la transferencia de la propiedad de los predios a favor de los solicitantes que reúnan los requisitos de ley.
+
+Mediante la Ley N°31056 y su reglamento D.S. N°002-2021-VIVIENDA, se crea un régimen temporal extraordinario de formalización y titulación de predios urbanos, el cual tiene una vigencia hasta el 31 de diciembre del 2026. Asimismo, mediante la Ley N°32267 amplía por última vez hasta el 31 de diciembre de 2021 los plazos establecidos en las leyes 28687 y 31056 para la formalización de terrenos estatales ocupados por posesiones informales.
+
+En el D.S. N°005-2026-VIVIENDA, Decreto Supremo que modifica el Reglamento del Título I de la Ley N°28687, Ley de desarrollo y complementaria de formalización de la propiedad informal, acceso al suelo y dotación de servicios básicos, denominado “Formalización de la Propiedad Informal de Terrenos Ocupados por Posesiones Informales, Centros Urbanos Informales y Urbanizaciones Populares”, aprobado por el Decreto Supremo N°006-2006-VIVIENDA, en su artículo 2.1 señala lo siguiente: *“Las entidades formalizadoras, en el ámbito de sus circunscripciones territoriales, asumen la competencia en materia de formalización de la propiedad informal, hasta la inscripción de los títulos de propiedad en el Registro de Predios.”*
+
+Mediante el Exp. Adm. N°`r expediente` `r titulares`, `r item$sujeto_solicitan` el procedimiento de formalización en el marco de la Ley N°28687 y su respectivo reglamento, así como el marco normativo Ley N°31056, Ley N°32267 y sus respectivos reglamentos, en donde `r item$sujeto_vienen` posesión del predio ubicado en la Mz `r mz` Lote `r lote` de la `r sector_nombre`, distrito de Anta, provincia de Anta, cuyo predio ha pasado a nombre de la Municipalidad Provincial de Anta inscrito en la partida electrónica `r partida`, para continuar con el proceso de formalización, el cual fue saneada por la Municipalidad Provincia de Anta mediante `r res_lotizacion` de fecha `r fecha_lotizacion`.
+
+Mediante el Exp. Adm. N°`r expediente` `r item$nombres_resumen`, `r item$sujeto_adjuntan` documentos sustentatorios del predio en posesión, entre ellos la constancia de posesión emitida por la Municipalidad Provincial de Anta, en la cual se constató la posesión de manera pacífica, pública y continua del predio situado en la Mz `r mz` Lote `r lote` de la `r sector_nombre`.
+
+De acuerdo al TUPA de la Municipalidad Provincial de Anta, los requisitos solicitados y presentados son los siguientes:
+
+| ITEM | DESCRIPCION | OBSERVACION |
+|:---:|:---|:---:|
+| 1 | Formato Único de Trámite (FUT) y solicitud dirigida al titular del pliego | CUMPLE |
+| 2 | Copia legalizada o fedateada del DNI de los titulares. | CUMPLE |
+| 3 | Declaración jurada de que sobre la superficie no exista proceso judicial ni administrativo pendiente en el que se discuta el mejor derecho de propiedad de posesión. | CUMPLE |
+| 4 | Constancia de ser socio activo del PP.JJ , AA.HH., COMUNIDAD, otorgado por la junta directiva vigente. | CUMPLE |
+| 5 | Constancia de posesión emitida por la junta directiva vigente. | CUMPLE |
+| 6 | Certificado o declaración jurada de defunción del cónyuge o del conviviente de ser el caso. | `r item$tupa_defuncion` |
+| 7 | Copia de acta de matrimonio de ser el caso. | `r item$tupa_matrimonio` |
+| 8 | Acta de convivencia de ser el caso. | `r item$tupa_convivencia` |
+| 9 | Copia de documentos que acrediten la posesión con 5 años de antigüedad (recibo de luz, autoevaluó, etc.). | CUMPLE |
+| 10 | Acta de colindancia (según modelo) con firmas legalizadas o fedateadas. | CUMPLE |
+| 11 | Recibo de pago por costo de desplazamiento de acuerdo a la zona y por inspección técnica (TUSNE). | CUMPLE |
+
+`r item$sujeto_admin_cap` `r item$sujeto_adjuntan` una declaración jurada en donde `r item$sujeto_declaran` la ubicación real del predio a formalizar, así como la conformidad del área y medias perimétricas que corresponde al predio en posesión y que está en base al plano de trazado y lotización aprobado mediante `r res_lotizacion`.
+
+### **BASE LEGAL**
+
+- Ley Orgánica de Municipalidades – Ley N° 27972.
+- Ley N° 28687 - Ley de Formalización de la Propiedad Informal, Acceso al Suelo y Dotación de Servicios Básicos.
+- Ley N°30711– Ley que Establece Medidas Complementarias para la Promoción del Acceso a la Propiedad Formal.
+- Ley N°31056 – Ley que Amplía los Plazos de la Titulación de Terrenos Ocupados por Posesiones Informales y Dicta Medidas para la Formalización.
+- Ley Nº31560 – Ley que Otorga Funciones Compartidas a los Gobiernos Locales en los procesos de Formalización de la Propiedad Informal.
+- Ley N°32267 – Ley que amplían plazo para formalización de terrenos ocupados por posesiones informales.
+- D.S. 005-2026-VIVIENDA - Decreto Supremo que modifica el Reglamento del Título I de la Ley N°28687, Ley de desarrollo y complementaria de formalización de la propiedad informal, acceso al suelo y dotación de servicios básicos, denominado “Formalización de la Propiedad Informal de Terrenos Ocupados por Posesiones Informales, Centros Urbanos Informales y Urbanizaciones Populares”, aprobado por el Decreto Supremo N°006-2006-VIVIENDA.
+
+### **EVALUACION**
+
+`r item$sujeto_admin_cap`, `r item$sujeto_cumplido` con los requisitos establecidos en el TUPA para el procedimiento de formalización de predios, el cual se pasa a detallar:
+
+- Mediante la declaración jurada, `r item$sujeto_admin` `r item$sujeto_declaran` no tener procedimiento judicial ni administrativo sobre el predio. Dicha manifestación escrita se declara como cierto, el cual se encuentra descrito en la Ley N°27444, Ley de Procedimiento Administrativo General.
+- `r item$sujeto_admin_cap` `r item$sujeto_presentan` una constancia de posesión remitida por la Municipalidad Provincial de Anta del predio ubicado en la Mz. `r mz` Lote `r lote` de la `r sector_nombre`, en la que se describe que `r item$sujeto_admin`, `r item$sujeto_vienen` posesión de forma continua, pacífica y publica del predio en mención.
+`r if (nzchar(item$evaluacion_formateada)) paste0("- ", item$evaluacion_formateada, "\n") else if (nzchar(compra_venta_txt)) paste0("- ", compra_venta_txt, "\n") else ""`
+- De acuerdo a la declaración jurada anexada al presente expediente para el proceso de formalización, el predio se encuentra ubicado en la `r sector_nombre` en la Mz `r mz` Lote `r lote`. El predio forma parte del terreno matriz que fue transferido por la asamblea de la `r sector_nombre` a la Municipalidad Provincial de Anta para realizar el proceso de formalización en el marco de la Ley N°28687 Ley de Formalización de la Propiedad Informal, Acceso al Suelo y Dotación de Servicios Básicos y la Ley N°31056 Ley que Amplía los Plazos de la Titulación de Terrenos Ocupados por Posesiones Informales y Dicta Medidas para la Formalización. El predio matriz se encuentra inscrito en la `r partida_matriz`.
+- El predio en posesión, su ubicación real de acuerdo al Plano de trazado y Lotización aprobado mediante `r res_lotizacion` de fecha `r fecha_lotizacion` corresponde al predio ubicado en la Mz `r mz` Lote `r lote` con un área de `r area_str` m2.
+- `r item$admin1_cap`, adjunta al presente expediente la constancia de SOCIO ACTIVO de la `r sector_nombre`, acreditando su participación activa dentro de la asociación.
+- `r item$sujeto_admin_cap` adjunta al presente expediente la constancia de posesión de lote otorgado por la junta directiva de la `r sector_nombre`, el cual certifican que `r item$sujeto_admin` viene haciendo posesión del predio a formalizar desde del año `r anio_pos`.
+- `r item$admin1_cap`, adjunta copias de recibo de pago de autovaluo y recibos de pago de servicio de energía eléctrica a nombre `r item$titular_recibo`, demostrando la posesión del predio.
+- `r item$admin1_cap`, mediante el acta de colindancia del predio el cual viene ejerciendo posesión, confirma mediante sus vecinos colindantes, la posesión que viene ejerciendo en el predio ubicado en la Mz `r mz` Lote `r lote` de la `r sector_nombre`. En el acta de inspección de campo, se corroboró la posesión continua, pacífica y publica de `r item$nombres_resumen`.
+- Se ha verificado que el predio se encuentra físicamente ubicados conforme al plano de trazado y lotización de la `r sector_nombre`, aprobado por la Gerencia de Desarrollo Urbano y Rural de la Municipalidad Provincial de Anta, mediante la `r res_lotizacion` de fecha `r fecha_lotizacion`.
+- De acuerdo a la constancia de posesión remitida por la Municipalidad Provincial de Anta, se constata la posesión de `r item$nombres_constata`, en forma continua, pacífica y publica desde el `r anio_pos`, y que, confirme a la Ley N°32267 – Ley que amplían plazo para formalización de terrenos ocupados por posesiones informales: “La antigüedad de la ocupación de las posesiones informales en las que se aplique tales procedimientos se extiende hasta el 31 de diciembre de 2021”. De esta manera, y de acuerdo a la documentación presentada, los administrados cumplen con los requisitos establecidos en las normas de formalización.
+- No se evidencian superposiciones con otras propiedades registradas ni con bienes de dominio público.
+- No existen antecedentes registrales que impidan su saneamiento.
+
+### **CONCLUSION**
+
+Habiéndose realizado la evaluación técnico-administrativa de la solicitud presentada por `r item$admin1` mediante el expediente N°`r expediente`, del procedimiento para la formalización de predios, del predio urbano ubicado en la LA `r sector_nombre` Mz `r mz` Lote `r lote` del distrito de Anta, provincia de Anta, del departamento de Cusco, con un área de `r area_str` m2 y un perímetro de `r perim_str` m, según la partida electrónica `r partida` SUNARP, se da **OPINIÓN FAVORABLE** para el proceso de formalización a favor de: `r titulares`, cumpliendo con los requisitos establecidos en el TUPA de la Municipalidad Provincial de Anta, por lo que solicita remitir el presente informe y sus actuados a la Gerencia Municipal para su posterior emisión del título de alcaldía, previo opinión por parte de la Gerencia de Asesoría Legal.
+
+Es todo cuanto informo a usted, para su conocimiento y fines correspondientes.
+
+::: {custom-style="Center"}
+Atentamente.
+:::

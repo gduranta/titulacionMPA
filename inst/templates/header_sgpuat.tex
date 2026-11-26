@@ -1,0 +1,57 @@
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{fontspec}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{lastpage}
+\usepackage{refcount}
+
+\setrefcountdefault{0}
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+
+\usepackage{sectsty}
+\usepackage{etoolbox}
+\sectionfont{\normalfont\bfseries\fontsize{11}{13}\selectfont}
+\subsectionfont{\normalfont\bfseries\fontsize{11}{13}\selectfont}
+\subsubsectionfont{\normalfont\bfseries\fontsize{11}{13}\selectfont}
+
+\setlength{\parskip}{0.32cm}
+\linespread{1.02}
+
+\AtBeginEnvironment{longtable}{\setlength{\parskip}{0pt}\linespread{1}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\includegraphics[width=1.8in,height=0.62in,keepaspectratio]{mpa.png}}
+\fancyhead[C]{\parbox{3.1in}{\centering\color{gray}\bfseries\fontsize{11}{13}\selectfont MUNICIPALIDAD PROVINCIAL DE\\ ANTA}}
+\fancyhead[R]{\includegraphics[width=1.8in,height=0.62in,keepaspectratio]{choquequirao.png}}
+\renewcommand{\headrulewidth}{1.2pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color[HTML]{9AB59B}\leaders\hrule height \headrulewidth\hfill}}
+
+\fancyfoot[L]{%
+  \ifnum\value{page}=\getrefbykeydefault{LastPage}{page}{0}\relax
+    \raisebox{4mm}[0pt][0pt]{%
+      \begin{tabular}[b]{@{}l@{}}
+        \fontsize{10pt}{12pt}\selectfont\textbf{GDUR}\\
+        \fontsize{10pt}{12pt}\selectfont\textbf{SGPUAT}\\
+        \fontsize{10pt}{12pt}\selectfont\textbf{CEEL}
+      \end{tabular}%
+    }%
+  \fi
+}
+\fancyfoot[R]{%
+  \ifnum\value{page}=\getrefbykeydefault{LastPage}{page}{0}\relax
+    \raisebox{4mm}[0pt][0pt]{%
+      \fontsize{9pt}{11pt}\selectfont C.c. Archivo%
+    }%
+  \fi
+}
+
+\setlength{\headheight}{54pt}
+\setlength{\footskip}{1.4cm}
+
+\fancypagestyle{plain}{%
+  \pagestyle{fancy}%
+}

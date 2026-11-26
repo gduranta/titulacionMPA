@@ -1,0 +1,323 @@
+---
+lang: es
+format:
+  docx:
+    reference-doc: ../formatos/ref_informe_legal.docx
+  pdf:
+    documentclass: article
+    geometry: top=4.8cm, bottom=3.1cm, left=2.45cm, right=2.45cm, headheight=0pt, headsep=0pt
+    fontsize: 10pt
+    pdf-engine: xelatex
+    include-in-header: header_legal.tex
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  config_rds: ""
+  mz: "A"
+  lote: "1"
+  num_informe_legal: ""
+  num_informe_sgpuat: ""
+  fecha_sgpuat: "25 de noviembre del 2026"
+  num_informe_gdur: ""
+  fecha_gdur: "25 de noviembre del 2026"
+  fecha: "25 de noviembre del 2026"
+  fecha_expediente: ""
+  gerente_municipal: ""
+  asesor_legal: ""
+---
+
+gerente_mun_doc <- if (nzchar(trimws(as.character(params$gerente_municipal)))) params$gerente_municipal else gerente_mun
+asesor_leg_doc  <- if (nzchar(trimws(as.character(params$asesor_legal)))) params$asesor_legal else asesor_leg
+```{r}
+if (!nzchar(trimws(as.character(params$config_rds))) || !file.exists(params$config_rds)) {
+  stop("Debe ejecutar desde titulacionMPA pasando config_rds.")
+}
+config <- readRDS(params$config_rds)
+source(file.path(config$pkg_root, "R", "00_config.R"))
+source(file.path(config$pkg_root, "R", "01_extractor_memoria.R"))
+source(file.path(config$pkg_root, "R", "02_extractor_excel.R"))
+source(file.path(config$pkg_root, "R", "03_transformador.R"))
+df_all <- obtener_dataset_proyecto(config)
+df <- df_all
+
+sector_nombre    <- config$meta$NOMBRE_SECTOR
+partida_matriz   <- config$meta$PARTIDA_MATRIZ
+res_lotizacion   <- config$meta$RES_APROBACION_LOTIZACION
+fecha_lotizacion <- config$meta$FECHA_APROBACION_LOTIZACION
+ordenanza_tupa   <- config$meta$ORDENANZA_TUPA
+alcalde_nombre   <- config$meta$ALCALDE_NOMBRE
+alcalde_dni      <- config$meta$ALCALDE_DNI
+domicilio_legal  <- config$meta$DOMICILIO_LEGAL
+gerente_mun      <- config$meta$GERENTE_MUNICIPAL
+asesor_leg       <- config$meta$ASESOR_LEGAL
+gerente_gdur     <- config$meta$GERENTE_GDUR
+subgerente_sg    <- config$meta$SUBGERENTE_SGPUAT
+
+
+mz_param <- toupper(trimws(as.character(params$mz)))
+lote_param <- trimws(as.character(params$lote))
+
+item <- dplyr::filter(df_all, toupper(.data$mz) == mz_param, as.character(.data$lote) == lote_param)
+if (nrow(item) != 1) stop(paste("Se esperaba un único predio para Mz.", mz_param, "Lote", lote_param, "; encontrados:", nrow(item)))
+item <- item[1, , drop = FALSE]
+
+extraer_correlativo_doc <- function(txt, default_val = "XXX") {
+  txt <- as.character(txt)
+  if (is.na(txt) || !nzchar(trimws(txt))) return(default_val)
+  m <- stringr::str_match(txt, "[Nn][°ºo.]+\\s*([0-9A-Za-z]+)")[, 2]
+  if (is.na(m)) m <- stringr::str_extract(txt, "[0-9]+")
+  if (is.na(m) || m == "2026") {
+    if (grepl("X", txt, ignore.case = TRUE)) "XXX" else default_val
+  } else {
+    m
+  }
+}
+
+# Número de informe SGPUAT
+num_sgpuat_param <- trimws(as.character(params$num_informe_sgpuat))
+num_sgpuat <- if (nzchar(num_sgpuat_param)) {
+  num_sgpuat_param
+} else if (nzchar(as.character(item$num_informe_sgpuat_num[[1]]))) {
+  as.character(item$num_informe_sgpuat_num[[1]])
+} else {
+  extraer_correlativo_doc(item$num_informe_sgpuat[[1]], default_val = "240")
+}
+
+# Número de informe GDUR
+num_gdur_param <- trimws(as.character(params$num_informe_gdur))
+num_gdur <- if (nzchar(num_gdur_param)) {
+  num_gdur_param
+} else {
+  extraer_correlativo_doc(item$num_informe_gdur[[1]], default_val = "XXX")
+}
+
+# Número de informe Legal (Columna U: "INFORME DE ASESORIA JURIDICA")
+num_legal_num_col <- if ("num_informe_legal_num" %in% names(item) && length(item$num_informe_legal_num) > 0) {
+  as.character(item$num_informe_legal_num[[1]])
+} else {
+  ""
+}
+if (is.na(num_legal_num_col)) num_legal_num_col <- ""
+
+num_legal_param <- trimws(as.character(params$num_informe_legal))
+num_legal <- if (nzchar(num_legal_param)) {
+  num_legal_param
+} else if (nzchar(num_legal_num_col)) {
+  num_legal_num_col
+} else {
+  extraer_correlativo_doc(item$num_informe_legal[[1]], default_val = "XXX")
+}
+
+# Fechas
+fecha_doc <- if (nzchar(trimws(params$fecha))) params$fecha else "25 de noviembre del 2026"
+fecha_sgp <- if (nzchar(trimws(params$fecha_sgpuat))) params$fecha_sgpuat else "25 de noviembre del 2026"
+fecha_gd  <- if (nzchar(trimws(params$fecha_gdur))) params$fecha_gdur else "25 de noviembre del 2026"
+
+# Fecha expediente
+fecha_exp_param <- trimws(as.character(params$fecha_expediente))
+fecha_exp <- if (nzchar(fecha_exp_param)) {
+  fecha_exp_param
+} else {
+  f_sol <- as.character(item$fecha_solicitud[[1]])
+  if (nzchar(f_sol) && grepl("^[0-9]+$", f_sol)) {
+    d <- as.Date(as.numeric(f_sol), origin = "1899-12-30")
+    meses <- c("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+    paste0(as.integer(format(d, "%d")), " de ", meses[as.integer(format(d, "%m"))], " del ", format(d, "%Y"))
+  } else if (nzchar(f_sol)) {
+    f_sol
+  } else {
+    "06 de noviembre del 2026"
+  }
+}
+
+expediente <- as.character(item$expediente[[1]])
+if (is.na(expediente) || !nzchar(trimws(expediente))) expediente <- as.character(item$exp_titulo[[1]])
+mz <- as.character(item$mz[[1]])
+lote <- as.character(item$lote[[1]])
+lote_str <- if (grepl("^[0-9]$", lote)) sprintf("%02d", as.integer(lote)) else lote
+
+partida <- as.character(item$partida[[1]])
+if (is.na(partida) || !nzchar(trimws(partida))) partida <- "11382256"
+
+area <- as.character(item$area_formateada[[1]])
+perimetro <- as.character(item$perimetro_formateado[[1]])
+
+# Titulares y personas
+t1_nom <- as.character(item$t1_nombre[[1]])
+t1_dni <- as.character(item$t1_dni[[1]])
+t2_nom <- as.character(item$t2_nombre[[1]])
+t2_dni <- as.character(item$t2_dni[[1]])
+est_civ <- toupper(trimws(as.character(item$estado_civil[[1]])))
+es_par <- isTRUE(item$es_pareja[[1]])
+t1_fem <- isTRUE(item$fem1[[1]])
+t2_fem <- isTRUE(item$fem2[[1]])
+
+trat1_min <- if (t1_fem) "sra." else "sr."
+trat1_cap <- if (t1_fem) "Sra." else "Sr."
+ident1 <- if (t1_fem) "identificada" else "identificado"
+
+trat2_min <- if (t2_fem) "sra." else "sr."
+trat2_cap <- if (t2_fem) "Sra." else "Sr."
+ident2 <- if (t2_fem) "identificada" else "identificado"
+
+# Administrado para antecedentes I.1
+admin_solic_ant <- if (t1_fem) glue::glue("la administrada {t1_nom}") else glue::glue("el administrado {t1_nom}")
+
+unir_y_legal <- function(vec) {
+  vec <- vec[nzchar(vec)]
+  n <- length(vec)
+  if (n == 0L) return("")
+  if (n == 1L) return(vec[1])
+  if (n == 2L) return(paste(vec[1], "y", vec[2]))
+  paste0(paste(vec[-n], collapse = ", "), " y ", vec[n])
+}
+
+ben_df <- if ("beneficiarios" %in% names(item) && length(item$beneficiarios) > 0 && is.data.frame(item$beneficiarios[[1]])) {
+  item$beneficiarios[[1]]
+} else {
+  NULL
+}
+
+# Sujeto para análisis III.3 y IV
+if (!is.null(ben_df) && nrow(ben_df) >= 3) {
+  partes_pos <- purrr::map_chr(seq_len(nrow(ben_df)), function(k) {
+    tr <- if (isTRUE(ben_df$es_fem[k])) "Sra." else "Sr."
+    paste(tr, ben_df$nombre[k])
+  })
+  sujeto_posesion <- paste("los administrados", unir_y_legal(partes_pos))
+
+  partes_tit <- purrr::map_chr(seq_len(nrow(ben_df)), function(k) {
+    tr <- if (isTRUE(ben_df$es_fem[k])) "Sra." else "Sr."
+    id <- if (isTRUE(ben_df$es_fem[k])) "identificada" else "identificado"
+    ec <- ben_df$est_civ_sing[k]
+    glue::glue("{tr} {ben_df$nombre[k]} {id} con DNI Nº {ben_df$dni[k]} de estado civil {ec}")
+  })
+  titulares <- unir_y_legal(partes_tit)
+} else if (es_par) {
+  admin_art <- if (t1_fem) "la administrada" else "el administrado"
+  sujeto_posesion <- glue::glue("{admin_art} {trat1_cap} {t1_nom} y {trat2_cap} {t2_nom}")
+
+  art2 <- if (t2_fem) "la" else "el"
+  if (grepl("CASAD", est_civ)) {
+    term_cas1 <- if (t1_fem) "casada" else "casado"
+    titulares <- glue::glue("{trat1_cap} {t1_nom} {ident1} con DNI Nº {t1_dni} de estado civil {term_cas1} con el {trat2_min} {t2_nom} {ident2} con DNI Nº {t2_dni}")
+  } else if (grepl("CONVIV", est_civ)) {
+    titulares <- glue::glue("{trat1_cap} {t1_nom} {ident1} con DNI Nº {t1_dni} y {art2} {trat2_min} {t2_nom} {ident2} con DNI Nº {t2_dni}, solteros en calidad de convivientes")
+  } else {
+    term1 <- if (t1_fem) "soltera" else "soltero"
+    term2 <- if (t2_fem) "soltera" else "soltero"
+    titulares <- glue::glue("{trat1_cap} {t1_nom} {ident1} con DNI Nº {t1_dni} de estado civil {term1} y {art2} {trat2_min} {t2_nom} {ident2} con DNI Nº {t2_dni} de estado civil {term2}")
+  }
+} else {
+  admin_art <- if (t1_fem) "la administrada" else "el administrado"
+  sujeto_posesion <- glue::glue("{admin_art} {trat1_cap} {t1_nom}")
+
+  term_civ <- if (grepl("VIUD", est_civ)) {
+    if (t1_fem) "viuda" else "viudo"
+  } else if (grepl("DIVORCIAD", est_civ)) {
+    if (t1_fem) "divorciada" else "divorciado"
+  } else if (grepl("CASAD", est_civ)) {
+    if (t1_fem) "casada" else "casado"
+  } else {
+    if (t1_fem) "soltera" else "soltero"
+  }
+  titulares <- glue::glue("{trat1_cap} {t1_nom} {ident1} con DNI Nº {t1_dni} de estado civil {term_civ}")
+}
+gerente_mun_doc <- if (nzchar(trimws(as.character(params$gerente_municipal)))) params$gerente_municipal else gerente_mun
+asesor_leg_doc  <- if (nzchar(trimws(as.character(params$asesor_legal)))) params$asesor_legal else asesor_leg
+```
+
+::: {.content-visible when-format="docx"}
+::: {custom-style="Title"}
+**INFORME LEGAL N.° `r num_legal` -2026-GAL-MPA**
+:::
+
+|  |  |  |
+|:--|:--:|:--|
+| **A** | : | `r gerente_mun_doc`<br>Gerente Municipal - MPA. |
+| **DE** | : | `r asesor_leg_doc`<br>Asesor Legal - MPA |
+| **ASUNTO** | : | FORMALIZACION DE PREDIOS. |
+| **REFERENCIA** | : | `r sector_nombre` Mz. “`r mz`” Lote `r lote_str`<br><br>EXPEDIENTE ADMINISTRATIVO N.°`r expediente`<br>INFORME N°`r num_sgpuat`-2026-SGPUAT-GDUR-MPA<br>INFORME N°`r num_gdur`-2026-EEIQ/GDUR-MPA |
+| **FECHA** | : | Anta, `r fecha_doc` |
+:::
+
+::: {.content-visible when-format="pdf"}
+gerente_mun_doc <- if (nzchar(trimws(as.character(params$gerente_municipal)))) params$gerente_municipal else gerente_mun
+asesor_leg_doc  <- if (nzchar(trimws(as.character(params$asesor_legal)))) params$asesor_legal else asesor_leg
+```{=latex}
+\vspace{-0.2cm}
+\begin{center}
+{\bfseries\fontsize{10.5}{12.5}\selectfont\underline{INFORME LEGAL N.° `r num_legal` -2026-GAL-MPA}}
+\end{center}
+\vspace{-0.1cm}
+
+\noindent\rule{\linewidth}{0.6pt}\vspace{0.15cm}
+
+\noindent\begin{tabular}{@{}p{2.6cm}@{\hspace{0.2cm}}p{0.3cm}@{\hspace{0.2cm}}p{\dimexpr\linewidth-3.3cm\relax}@{}}
+\textbf{A} & : & `r gerente_mun_doc`\\
+& & Gerente Municipal - MPA.\\[3pt]
+\textbf{DE} & : & `r asesor_leg_doc`\\
+& & Asesor Legal - MPA\\[3pt]
+\textbf{ASUNTO} & : & FORMALIZACION DE PREDIOS.\\[3pt]
+\textbf{REFERENCIA} & : & `r sector_nombre` Mz. “`r mz`” Lote `r lote_str`\\[3pt]
+& & EXPEDIENTE ADMINISTRATIVO N.°`r expediente`\\
+& & INFORME N°`r num_sgpuat`-2026-SGPUAT-GDUR-MPA\\
+& & INFORME N°`r num_gdur`-2026-EEIQ/GDUR-MPA\\[3pt]
+\textbf{FECHA} & : & Anta, `r fecha_doc`
+\end{tabular}
+
+\vspace{0.15cm}\noindent\rule{\linewidth}{0.6pt}
+gerente_mun_doc <- if (nzchar(trimws(as.character(params$gerente_municipal)))) params$gerente_municipal else gerente_mun
+asesor_leg_doc  <- if (nzchar(trimws(as.character(params$asesor_legal)))) params$asesor_legal else asesor_leg
+```
+:::
+
+Previo un atento y cordial saludo, tengo el agrado de dirigirme a usted, en atención al documento de referencia, respecto a la solicitud, por lo que cumplo con emitir la correspondiente Informe Legal, en los siguientes términos:
+
+### I. ANTECEDENTES:
+
+1. Mediante EXPEDIENTE ADMINISTRATIVO N.°`r expediente` ingresado por mesa de partes; en fecha `r fecha_exp`, `r admin_solic_ant`, solicita formalización de la `r sector_nombre` Mz. “`r mz`” Lote `r lote_str` del distrito de Anta, provincia de Anta y Departamento de Cusco.
+
+2. Mediante Informe N.º `r num_sgpuat`-2026-SGPUAT-GDUR-MPA de fecha `r fecha_sgp`, el Subgerente de Planeamiento Urbano y Acondicionamiento Territorial se dirige al Gerente de Desarrollo Urbano y Rural remitiendo opinión favorable de proceso de formalización de predios en merito a que habiendo realizado la evaluación técnico-administrativa del Exp. `r expediente` cumple con los requisitos establecidos en el TUPA de la Entidad y por lo que solicita opinión legal para su continuación del proceso de titulación del predio de la `r sector_nombre` Mz. “`r mz`” Lote `r lote_str` del distrito de Anta, provincia de Anta y Departamento de Cusco.
+
+3. Mediante Informe N.° `r num_gdur`-2026-EEIQ/GDUR-MPA de fecha `r fecha_gd`, la Gerente de Desarrollo Urbano y Rural se dirige al Gerente Municipal remitiendo expediente administrativo de formalización de predio para su trámite.
+
+### II. BASE LEGAL:
+
+1. Constitución Política del Perú.
+2. Ley N° 27972 Ley Orgánica de Municipalidades.
+3. Ley N° 27444, Ley del Procedimiento Administrativo General.
+4. Ley N° 28687, Ley de Desarrollo y Complementaria de Formalización de la Propiedad Informal Acceso al Suelo y Dotación de Servicios Básicos y su Reglamento aprobado por Decreto Supremo N° 006-2006, modificado por Decreto Supremo N° 030-2008-VIVIENDA, y el Decreto Supremo N° 020-2012-VIVIENDA. Decreto Supremo N° 004-2020-VIVIENDA.
+
+### III. ANALISIS:
+
+1. La Municipalidad Provincial de Anta, es un órgano de Gobierno Local, promotor de desarrollo, con personería jurídica de derecho público y plena capacidad para el cumplimiento de sus fines, con autonomía política, económica y administrativa en los asuntos de su competencia, que representa al vecindario y tiene como finalidad la adecuada prestación de servicios públicos locales y el desarrollo integral, sostenible y armónico en su circunscripción. Del mismo modo, revaloriza sus patrones culturales e impulsa las obras de infraestructura básica, mejorando la calidad de vida de la población y promoviendo la participación de la inversión pública.
+
+2. Respecto a la titularidad de predios en procedimientos administrativos, la Ley 27444 establece: Administrados con Interés Legítimo: Quienes promueven procedimientos como titulares de derechos (incluyendo derechos sobre predios) o intereses legítimos son considerados administrados.
+
+3. De la documentación presentada, y del sustento favorable de la Sub Gerencia de Planeamiento Urbano y Acondicionamiento Territorial se evidencia que `r sujeto_posesion`, se encuentra en posesión del predio, de la `r sector_nombre` Mz. “`r mz`” Lote `r lote_str` con un área total de `r area` m2, según la partida electrónica `r partida` SUNARP.
+
+4. Mediante la ley N°29802 ley de ampliación Ley Nº298023 se amplió el plazo por un período de cinco años, el cual fue ampliado por Ley N°305134 hasta el 31 de diciembre de 2017 que a su vez se amplió por Ley N°307115 hasta el 31 de diciembre de 2021, plazo que fuese ampliado por Ley N° 31056 hasta el 31 de diciembre del 2026.
+
+5. Ahora bien, haciendo mención a la ley N.°28687 ley de desarrollo y complementaria de formalización de la propiedad informal, acceso al suelo y dotación de servicios básicos, en su Artículo 2 indica:
+
+   “Formalización de la propiedad Declárase de preferente interés nacional la formalización de la propiedad informal, con su respectiva inscripción registral, respecto de los terrenos ocupados por posesiones informales, centros urbanos informales, urbanizaciones populares y toda otra forma de posesión, ocupación o titularidad informal de predios que estén constituidos sobre inmuebles de propiedad estatal, con fines de vivienda. Asimismo, compréndanse dentro de los alcances del objeto de la Ley a los mercados públicos informales.”
+
+6. En este orden de ideas el Decreto Supremo N°006-2026-VIVIENDA en su artículo 2 numeral 2.1 señala: ” Las entidades formalizadoras en el ámbito de sus circunscripciones territoriales, asumen la competencia en materia de formalización de la propiedad informal, hasta la inscripción de los Títulos de propiedad en el Registro de predios” ; en este sentido, el Texto Único de Procedimientos Administrativos (TUPA), aprobado mediante Ordenanza Municipal N°019-2019-AL-CPA-MPA, de la Municipalidad Provincial de Anta indica que la Municipalidad está facultada para legalizar la transferencia de propiedad de los predios a favor de los solicitantes que reúnan los requisitos de Ley.
+
+7. En este entender la Sub Gerencia de Planeamiento Urbano y Acondicionamiento Territorial de la Municipalidad Provincial de Anta es la encargada de verificar que los administrados cumplan con los requisitos establecidos en el procedimiento del (TUPA), de la Municipalidad Provincial de Anta, para luego dar su visto bueno y se prosiga con el trámite administrativo correspondiente.
+
+### IV. OPINION:
+
+Esta Oficina Legal OPINA que, de la evaluación de la documentación presentada por los administrados, así como de la verificación técnica efectuada por la Subgerencia de Planeamiento Urbano y Acondicionamiento Territorial de la Municipalidad Provincial de Anta, la solicitud formulada por la administrado(a)(s), `r titulares`, respecto del predio urbano ubicado en `r sector_nombre` “`r mz`” Lote `r lote_str` del distrito de Anta, provincia de Anta y Departamento de Cusco, con un área total de `r area` m2, , según la partida electrónica `r partida` SUNARP, resulta PROCEDENTE, al haberse acreditado el cumplimiento de los requisitos exigidos por la normativa vigente.
+
+En consecuencia, corresponde continuar con el trámite del procedimiento de titulación del referido predio, por encontrarse dicho procedimiento contemplado en el Texto Único de Procedimientos Administrativos (TUPA) de la Municipalidad Provincial de Anta y debidamente sustentado en el marco legal aplicable.
+
+Atentamente
+
+\
+\
+\
+**ASESORÍA JURÍDICA**

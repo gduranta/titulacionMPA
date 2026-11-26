@@ -1,0 +1,349 @@
+---
+lang: es
+format:
+  docx:
+    reference-doc: ../formatos/ref_resolucion.docx
+  pdf:
+    documentclass: article
+    geometry: top=3.0cm, bottom=1.5cm, left=2.5cm, right=2.5cm, footskip=0.6cm, headheight=0pt, headsep=0pt
+    fontsize: 11pt
+    pdf-engine: xelatex
+    include-in-header: header_resolucion.tex
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  config_rds: ""
+  mz: "A"
+  lote: "1"
+  num_resolucion: ""
+  fecha: "30 de noviembre del 2026"
+  fecha_expediente: ""
+  fecha_sgpuat: "24 de noviembre del 2026"
+  num_informe_gdur: ""
+  fecha_gdur: "24 de noviembre del 2026"
+  num_informe_legal: ""
+  fecha_legal: "25 de noviembre del 2026"
+  num_proveido_gm: ""
+  fecha_proveido: "25 de noviembre del 2026"
+---
+
+```{r}
+if (!nzchar(trimws(as.character(params$config_rds))) || !file.exists(params$config_rds)) {
+  stop("Debe ejecutar desde titulacionMPA pasando config_rds.")
+}
+config <- readRDS(params$config_rds)
+source(file.path(config$pkg_root, "R", "00_config.R"))
+source(file.path(config$pkg_root, "R", "01_extractor_memoria.R"))
+source(file.path(config$pkg_root, "R", "02_extractor_excel.R"))
+source(file.path(config$pkg_root, "R", "03_transformador.R"))
+df_all <- obtener_dataset_proyecto(config)
+df <- df_all
+
+sector_nombre    <- config$meta$NOMBRE_SECTOR
+partida_matriz   <- config$meta$PARTIDA_MATRIZ
+res_lotizacion   <- config$meta$RES_APROBACION_LOTIZACION
+fecha_lotizacion <- config$meta$FECHA_APROBACION_LOTIZACION
+ordenanza_tupa   <- config$meta$ORDENANZA_TUPA
+alcalde_nombre   <- config$meta$ALCALDE_NOMBRE
+alcalde_dni      <- config$meta$ALCALDE_DNI
+domicilio_legal  <- config$meta$DOMICILIO_LEGAL
+gerente_mun      <- config$meta$GERENTE_MUNICIPAL
+asesor_leg       <- config$meta$ASESOR_LEGAL
+gerente_gdur     <- config$meta$GERENTE_GDUR
+subgerente_sg    <- config$meta$SUBGERENTE_SGPUAT
+
+
+mz_param <- toupper(trimws(as.character(params$mz)))
+lote_param <- trimws(as.character(params$lote))
+
+item <- dplyr::filter(df_all, toupper(.data$mz) == mz_param, as.character(.data$lote) == lote_param)
+if (nrow(item) != 1) stop(paste("Se esperaba un único predio para Mz.", mz_param, "Lote", lote_param))
+item <- item[1, , drop = FALSE]
+
+mz <- as.character(item$mz[[1]])
+lote <- as.character(item$lote[[1]])
+partida <- as.character(item$partida[[1]])
+expediente <- as.character(item$expediente[[1]])
+
+extraer_correlativo_doc <- function(txt, default_val = "XXX") {
+  txt <- as.character(txt)
+  if (is.na(txt) || !nzchar(trimws(txt))) return(default_val)
+  m <- stringr::str_match(txt, "[Nn][°ºo.]+\\s*([0-9A-Za-z]+)")[, 2]
+  if (is.na(m)) m <- stringr::str_extract(txt, "[0-9]+")
+  if (is.na(m) || m == "2026") {
+    if (grepl("X", txt, ignore.case = TRUE)) "XXX" else default_val
+  } else {
+    m
+  }
+}
+
+# Número de informe SGPUAT
+num_sgpuat <- if (nzchar(item$num_informe_sgpuat_num[[1]])) {
+  item$num_informe_sgpuat_num[[1]]
+} else {
+  extraer_correlativo_doc(item$num_informe_sgpuat[[1]], default_val = "240")
+}
+
+# Número de informe GDUR
+num_gdur_param <- trimws(as.character(params$num_informe_gdur))
+num_gdur <- if (nzchar(num_gdur_param)) num_gdur_param else extraer_correlativo_doc(item$num_informe_gdur[[1]], default_val = "XXX")
+
+# Número de informe Legal
+num_legal_param <- trimws(as.character(params$num_informe_legal))
+num_legal <- if (nzchar(num_legal_param)) num_legal_param else extraer_correlativo_doc(item$num_informe_legal[[1]], default_val = "XXX")
+
+# Número de resolución
+num_res_param <- trimws(as.character(params$num_resolucion))
+num_res <- if (nzchar(num_res_param)) num_res_param else extraer_correlativo_doc(item$num_resolucion_sg[[1]], default_val = "XXX")
+
+# Número de proveído GM
+num_prov_param <- trimws(as.character(params$num_proveido_gm))
+num_prov <- if (nzchar(num_prov_param)) num_prov_param else extraer_correlativo_doc(item$num_proveido_sg[[1]], default_val = "XXXX")
+
+# Fechas
+fecha_doc <- if (nzchar(trimws(params$fecha))) params$fecha else "25 de noviembre del 2026"
+fecha_exp_param <- trimws(as.character(params$fecha_expediente))
+fecha_exp <- if (nzchar(fecha_exp_param)) {
+  fecha_exp_param
+} else {
+  f_sol <- as.character(item$fecha_solicitud[[1]])
+  if (nzchar(f_sol) && grepl("^[0-9]+$", f_sol)) {
+    d <- as.Date(as.numeric(f_sol), origin = "1899-12-30")
+    meses <- c("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+    paste0(as.integer(format(d, "%d")), " de ", meses[as.integer(format(d, "%m"))], " del ", format(d, "%Y"))
+  } else if (nzchar(f_sol)) {
+    f_sol
+  } else {
+    "18 de noviembre del 2026"
+  }
+}
+
+fecha_sgp <- if (nzchar(trimws(params$fecha_sgpuat))) params$fecha_sgpuat else "24 de noviembre del 2026"
+fecha_gd  <- if (nzchar(trimws(params$fecha_gdur))) params$fecha_gdur else "24 de noviembre del 2026"
+fecha_leg <- if (nzchar(trimws(params$fecha_legal))) params$fecha_legal else "25 de noviembre del 2026"
+fecha_prov <- if (nzchar(trimws(params$fecha_proveido))) params$fecha_proveido else "25 de noviembre del 2026"
+
+t1_nom <- as.character(item$t1_nombre[[1]])
+t1_dni <- as.character(item$t1_dni[[1]])
+t2_nom <- as.character(item$t2_nombre[[1]])
+t2_dni <- as.character(item$t2_dni[[1]])
+est_civ <- toupper(trimws(as.character(item$estado_civil[[1]])))
+es_par <- isTRUE(item$es_pareja[[1]])
+t1_fem <- isTRUE(item$fem1[[1]])
+t2_fem <- isTRUE(item$fem2[[1]])
+
+trat1 <- if (t1_fem) "sra." else "sr."
+ident1 <- if (t1_fem) "identificada" else "identificado"
+trat2 <- if (t2_fem) "sra." else "sr."
+ident2 <- if (t2_fem) "identificada" else "identificado"
+
+unir_y_res <- function(vec) {
+  vec <- vec[nzchar(vec)]
+  n <- length(vec)
+  if (n == 0L) return("")
+  if (n == 1L) return(vec[1])
+  if (n == 2L) return(paste(vec[1], "y", vec[2]))
+  paste0(paste(vec[-n], collapse = ", "), " y ", vec[n])
+}
+
+ben_df <- if ("beneficiarios" %in% names(item) && length(item$beneficiarios) > 0 && is.data.frame(item$beneficiarios[[1]])) {
+  item$beneficiarios[[1]]
+} else {
+  NULL
+}
+
+# Texto titular para FUT inicial y concordancias gramaticales
+if (!is.null(ben_df) && nrow(ben_df) >= 3) {
+  partes_fut <- purrr::map_chr(seq_len(nrow(ben_df)), function(k) {
+    tr <- if (isTRUE(ben_df$es_fem[k])) "sra." else "sr."
+    id <- if (isTRUE(ben_df$es_fem[k])) "identificada" else "identificado"
+    art <- if (k == 1L) "" else if (isTRUE(ben_df$es_fem[k])) "la " else "el "
+    glue::glue("{art}{tr} {ben_df$nombre[k]} {id} con DNI Nº {ben_df$dni[k]}")
+  })
+  titular_fut <- unir_y_res(partes_fut)
+  verbo_fut <- "solicitan la formalización"
+  posesion_fut <- "vienen ejerciendo posesión"
+  solicitante_eval <- "los administrados"
+  interesado_notif <- "a los administrados interesados"
+
+  partes_res <- purrr::map_chr(seq_len(nrow(ben_df)), function(k) {
+    tr <- if (isTRUE(ben_df$es_fem[k])) "sra." else "sr."
+    id <- if (isTRUE(ben_df$es_fem[k])) "identificada" else "identificado"
+    art <- if (k == 1L) "" else if (isTRUE(ben_df$es_fem[k])) "la " else "el "
+    ec <- ben_df$est_civ_sing[k]
+    glue::glue("{art}{tr} {ben_df$nombre[k]} {id} con DNI Nº {ben_df$dni[k]} de estado civil {ec}")
+  })
+  titulares_res <- paste("los administrados", unir_y_res(partes_res))
+} else if (es_par) {
+  art2 <- if (t2_fem) "la" else "el"
+  titular_fut <- glue::glue("{trat1} {t1_nom} {ident1} con DNI Nº {t1_dni} y {art2} {trat2} {t2_nom} {ident2} con DNI Nº {t2_dni}")
+  verbo_fut <- "solicitan la formalización"
+  posesion_fut <- "vienen ejerciendo posesión"
+  solicitante_eval <- "los administrados"
+  interesado_notif <- "a los administrados interesados"
+
+  if (grepl("CASAD", est_civ)) {
+    term_cas1 <- if (t1_fem) "casada" else "casado"
+    titulares_res <- glue::glue("los administrados {trat1} {t1_nom} {ident1} con DNI Nº {t1_dni} de estado civil {term_cas1} con {art2} {trat2} {t2_nom} {ident2} con DNI Nº {t2_dni}")
+  } else if (grepl("CONVIV", est_civ)) {
+    titulares_res <- glue::glue("los administrados {trat1} {t1_nom} {ident1} con DNI Nº {t1_dni} y {art2} {trat2} {t2_nom} {ident2} con DNI Nº {t2_dni}, solteros en calidad de convivientes")
+  } else {
+    term1 <- if (t1_fem) "soltera" else "soltero"
+    term2 <- if (t2_fem) "soltera" else "soltero"
+    titulares_res <- glue::glue("los administrados {trat1} {t1_nom} {ident1} con DNI Nº {t1_dni} de estado civil {term1} y {art2} {trat2} {t2_nom} {ident2} con DNI Nº {t2_dni} de estado civil {term2}")
+  }
+} else {
+  titular_fut <- glue::glue("{trat1} {t1_nom} {ident1} con DNI Nº {t1_dni}")
+  verbo_fut <- "solicita la formalización"
+  posesion_fut <- "viene ejerciendo posesión"
+  solicitante_eval <- if (t1_fem) "la administrada" else "el administrado"
+  interesado_notif <- if (t1_fem) "a la administrada interesada" else "al administrado interesado"
+
+  term_civ <- if (grepl("VIUD", est_civ)) {
+    if (t1_fem) "viuda" else "viudo"
+  } else if (grepl("DIVORCIAD", est_civ)) {
+    if (t1_fem) "divorciada" else "divorciado"
+  } else if (grepl("CASAD", est_civ)) {
+    if (t1_fem) "casada" else "casado"
+  } else {
+    if (t1_fem) "soltera" else "soltero"
+  }
+  admin_indiv <- if (t1_fem) "la administrada" else "el administrado"
+  titulares_res <- glue::glue("{admin_indiv} {trat1} {t1_nom} {ident1} con DNI Nº {t1_dni}, de estado civil {term_civ}")
+}
+
+# Requisitos TUPA (conforme a informe SGPUAT y columnas Excel Q y R):
+tupa_6 <- if (!is.null(item$tupa_defuncion) && nzchar(as.character(item$tupa_defuncion[[1]]))) {
+  as.character(item$tupa_defuncion[[1]])
+} else if (!is.null(item$tupa_item_6)) {
+  as.character(item$tupa_item_6[[1]])
+} else {
+  "NO CORRESPONDE"
+}
+
+tupa_7 <- if (!is.null(item$tupa_matrimonio) && nzchar(as.character(item$tupa_matrimonio[[1]]))) {
+  as.character(item$tupa_matrimonio[[1]])
+} else if (!is.null(item$tupa_item_7)) {
+  as.character(item$tupa_item_7[[1]])
+} else {
+  "NO CORRESPONDE"
+}
+
+tupa_8 <- if (!is.null(item$tupa_convivencia) && nzchar(as.character(item$tupa_convivencia[[1]]))) {
+  as.character(item$tupa_convivencia[[1]])
+} else if (!is.null(item$tupa_item_8)) {
+  as.character(item$tupa_item_8[[1]])
+} else {
+  "NO CORRESPONDE"
+}
+```
+
+::: {.content-visible when-format="docx"}
+::: {custom-style="ResolucionTitle"}
+[**RESOLUCIÓN DE ALCALDIA N. º`r num_res`-2026-A-MPA/C**]{.underline}
+:::
+
+::: {custom-style="ResolucionDate"}
+Anta, `r fecha_doc`.
+:::
+
+::: {custom-style="ResolucionAlcalde"}
+[**EL ALCALDE DE LA MUNICIPALIDAD PROVINCIAL DE ANTA**]{.underline}
+:::
+:::
+
+::: {.content-visible when-format="pdf"}
+\begin{center}
+\uline{\textbf{RESOLUCIÓN DE ALCALDIA N. º`r num_res`-2026-A-MPA/C}}
+\end{center}
+
+\begin{flushright}
+Anta, `r fecha_doc`.
+\end{flushright}
+
+\vspace{0.15cm}
+\begin{center}
+\uline{\textbf{EL ALCALDE DE LA MUNICIPALIDAD PROVINCIAL DE ANTA}}
+\end{center}
+\vspace{-0.25cm}
+:::
+
+**VISTO:** El expediente administrado N.°`r expediente`, presentado de fecha `r fecha_exp`, el INFORME N°`r num_sgpuat`-2026-SGPUAT-GDUR-MPA de la Subgerencia de Planeamiento Urbano y Acondicionamiento Territorial, el INFORME N°`r num_gdur`-2026-EEIQ/GDUR-MPA de la Gerencia de Desarrollo Urbano y Rural; y el INFORME LEGAL N.º `r num_legal`-2026-GAL-MPA de la Gerencia de Asesoría Legal de la Municipalidad Provincial de Anta, y;
+
+**CONSIDERANDO:**
+
+Que, el artículo 194° de la Constitución Política del Estado; concordante con el artículo II del Título Preliminar de la Ley N.º 27972 Ley Orgánica de Municipalidades, señala que la Autonomía conferida radica la facultad que tienen las Municipalidades de poder ejercer actos de Gobierno, actos administrativos y actos de administración, los mismos que deben estar impartidos con sujeción al ordenamiento jurídico vigente;
+
+Que, el Principio de Legalidad reconocido en el artículo IV del Título Preliminar del Texto Único Ordenado de la Ley N.°27444 Ley del Procedimiento Administrativo General, aprobado por el Decreto Supremo N.°004-2019-JUS establece que; “todas las autoridades administrativas deben actuar con respeto a la Constitución, la ley y el derecho, dentro de sus facultades que le estén atribuidas y de acuerdo con los fines para los que les fueron conferidas”;
+
+Que, el numeral 6 del artículo 195 de la Constitución Política del Perú, preceptúa que los gobiernos locales tienen competencia para planificar el desarrollo urbano y rural de sus circunscripciones, incluyendo la zonificación, urbanismo у el acondicionamiento territorial; y dentro de este marco normativo constitucional, el artículo 73° la Ley N.° 27972 Ley Orgánica de Municipalidades ha regulado que las Municipalidades, tomando en cuenta su condición de municipalidad provincial o distrital, asumen las competencias y ejercen las funciones específicas señaladas en el capítulo II del título V de dicha norma municipal con carácter exclusiva o compartido entre otras materias, en cuanto a la organización del espacio físico y uso de suelo del ámbito de su jurisdicción territorial, estando dentro de ello el reconocimiento, verificación, titulación y saneamiento físico legal de asentamientos humanos a que se refiere el artículo 79°, numeral 1.4.3 de la misma Ley;
+
+Que, mediante Formulario Único de Tramite (FUT) con expediente administrado N.°`r expediente`, presentado de fecha `r fecha_exp`; interpuesto por `r titular_fut`, `r verbo_fut` de predio, donde `r posesion_fut` del predio ubicado en la `r sector_nombre` Mz. “`r mz`” Lote `r lote` del distrito de Anta, provincia de Anta y Departamento de Cusco;
+
+Que mediante el INFORME N°`r num_sgpuat`-2026-SGPUAT-GDUR-MPA de fecha `r fecha_sgp` la Subgerencia de Planeamiento Urbano y Acondicionamiento Territorial de la Municipalidad Provincial de Anta, habiendo realizado la evaluación técnico-administrativa de la solicitud presentada por `r solicitante_eval` mediante el Expediente N.°`r expediente`, del predio urbano ubicado en la `r sector_nombre` Mz. “`r mz`” Lote `r lote` del distrito de Anta, provincia de Anta y Departamento de Cusco; Inscrito con Partida Registral N.º PE. `r partida` - SUNARP por lo que da opinión favorable a favor de `r titulares_res`; para el proceso de formalización remitiendo el informe y actuados a Gerencia de Desarrollo Urbano y Rural, para su posterior emisión de título de alcaldía, previa opinión del Asesor Legal;
+
+Que, mediante INFORME N°`r num_gdur`-2026-EEIQ/GDUR-MPA de fecha `r fecha_gd`, la Gerencia de Desarrollo Urbano y Rural, remite el expediente a Gerencia Municipal para la emisión de acto administrativo correspondiente;
+
+Que, mediante INFORME LEGAL N.º `r num_legal`-2026-GAL-MPA de fecha `r fecha_leg`, la Gerencia de Asesoría Legal opina de manera favorable a la petición formulada sobre la solicitud del “Proceso de formalización del predio ubicado en la `r sector_nombre` Mz. “`r mz`” Lote `r lote`, del distrito y provincia de Anta, departamento del Cusco y recomienda que se emita el acto administrativo correspondiente, remitiendo el expediente a Gerencia Municipal;
+
+Que, mediante proveído N°`r num_prov`-2026-GM-MPA de fecha `r fecha_prov` la Gerencia Municipal remite el expediente administrativo a Secretaria General y emita el acto administrativo resolutivo según corresponda;
+
+Que, el inciso 4.1 del artículo 4 de la Ley N.º 28687 Ley de Desarrollo y Complementaria de Formalización de La Propiedad Informal, Acceso al Suelo y Dotación de Servicios Básicos, señala: “Las Municipalidades Provinciales, en el ámbito de sus circunscripciones territoriales, asumen la competencia exclusiva y excluyente en materia de formalización de la propiedad informal, hasta la inscripción de los títulos de propiedad en el registro de predios”;
+
+Que, el inciso 4.2 del artículo 4 de la Ley N.º 28687 Ley de Desarrollo y Complementaria de Formalización de La Propiedad Informal, Acceso al Suelo y Dotación de Servicios Básico, modificado por el Artículo 3 de la Ley N.º 31560 Ley que Otorga Funciones Compartidas a los Gobiernos Locales en los Procesos de Formalización de la Propiedad Informal señala: “Las municipalidades provinciales planifican, organizan y coordinan, en armonía con los planes de desarrollo urbano de cada localidad, el proceso de formalización de la propiedad informal mediante el reconocimiento, verificación y saneamiento físico legal de las posesiones informales, hasta la inscripción de los títulos u otros instrumentos en el Registro de Predios, de la Superintendencia Nacional de los Registros Públicos (SUNARP)”;
+
+Que, el inciso 4.3 del artículo 4 del mismo cuerpo normativo señala: “Corresponde al alcalde provincial, en el ámbito de su circunscripción territorial, suscribir los títulos de propiedad y los demás instrumentos de formalización”;
+
+Que, el numeral 5.1 del artículo 5 de la Ley N.º 28687 Ley de Desarrollo y Complementaria de Formalización de La Propiedad Informal, acceso al suelo y dotación de servicios básicos señala posesiones informales: A los denominados asentamientos humanos, pueblos jóvenes, barrios marginales, barriadas, programas de vivienda municipales, centros poblados y toda otra forma de posesión, ocupación o titularidad informal de predios con fines urbanos, cualquiera sea su denominación, siempre que presenten las características establecidas en el Reglamento de Formalización de la Propiedad, aprobado mediante Decreto Supremo N.º 013-99-MTC;
+
+Que, el Decreto Legislativo N.º 803 Ley de Promoción del Acceso a la Propiedad Formal, se declaró de interés nacional la promoción del acceso a la propiedad formal y su inscripción registral con el fin de garantizar los derechos de todos los ciudadanos a la propiedad y al ejercicio de la iniciativa privada en una economía social de mercado;
+
+Que, el Texto Único de Procedimientos Administrativos TUPA de la Municipalidad Provincial de Anta, aprobado mediante Ordenanza Municipal N.º 19-2019-AL-CPA-MPA de fecha 27 de diciembre de 2019, los requisitos solicitados y presentados son los siguientes:
+
+| ITEM | DESCRIPCIÓN | OBSERVACIÓN |
+|:---:|:---|:---:|
+| 1 | Formato Único de Trámite (FUT) y solicitud dirigida al titular del pliego | CUMPLE |
+| 2 | Copia legalizada o fedateada del DNI de los titulares. | CUMPLE |
+| 3 | Declaración jurada de que sobre la superficie no exista proceso judicial ni administrativo pendiente en el que se discuta el mejor derecho de propiedad de posesión. | CUMPLE |
+| 4 | Constancia de ser socio activo del PP. JJ, AA.HH., COMUNIDAD, otorgado por la junta directiva vigente. | CUMPLE |
+| 5 | Constancia de posesión emitida por la junta directiva vigente. | CUMPLE |
+| 6 | Certificado o declaración jurada de defunción del cónyuge o del conviviente de ser el caso | `r tupa_6` |
+| 7 | Copia de acta de matrimonio de ser el caso. | `r tupa_7` |
+| 8 | Acta de convivencia de ser el caso. | `r tupa_8` |
+| 9 | Copia de documentos que acrediten la posesión con 5 años de antigüedad (recibo de luz, autoevaluó, etc.). | CUMPLE |
+| 10 | Acta de colindancia (según modelo) con firmas legalizadas o fedateadas | CUMPLE |
+| 11 | Recibo de pago por costos de desplazamiento de acuerdo a la zona y por inspección técnica (TUSNE) | CUMPLE |
+: {tbl-colwidths="[8, 68, 24]"}
+
+Que, mediante INFORME LEGAL N.º `r num_legal`-2026-GAL-MPA de fecha `r fecha_leg`, la Gerencia de Asesoría Legal, opina por LA VIABILIDAD LEGAL Y PROCEDENCIA de la formalización a favor de `r titulares_res` del predio ubicado en la `r sector_nombre` Mz. “`r mz`” Lote `r lote`, del distrito y provincia de Anta, departamento del Cusco;
+
+Que, teniendo en cuenta el Principio de Legalidad, del debido procedimiento administrativo y principio de buena fe procedimental, corresponde en sede de instancia resolver los actuados conforme a los documentos que obran en el expediente administrativo y a las opiniones técnicas y legales que obran en autos, las mismas que tienen sustento conforme a las facultades delegadas a los funcionarios y servidores que las suscriben;
+
+Estando a los documentos del Visto; y 
+
+En uso de las atribuciones conferidas por el inciso 6 del artículo 20 de la Ley N.º 27972, Ley Orgánica de Municipalidades, que establece que el alcalde tiene la facultad de ejercer la representación legal de la municipalidad;
+
+**SE RESUELVE:**
+
+**ARTICULO PRIMERO. - DISPONER** el OTORGAMIENTO DE TITULO DE PROPIEDAD a favor de `r titulares_res`, según Partida Registral N.º PE. `r partida` SUNARP Lote `r lote` Mz. `r mz` de la `r sector_nombre` del distrito de Anta, provincia de Anta del departamento de Cusco, tal como se establece en el INFORME N°`r num_sgpuat`-2026-SGPUAT-GDUR-MPA, emitida por la Subgerencia de Planeamiento Urbano y Acondicionamiento Territorial. 
+
+**ARTICULO SEGUNDO. - DISPONER**, a la Oficina de Secretaria General de la Municipalidad Provincial de Anta, realizar los trámites correspondientes para la emisión del Título de Propiedad, teniendo en cuenta el INFORME N°`r num_sgpuat`-2026-SGPUAT-GDUR-MPA, emitida por la Subgerencia de Planeamiento Urbano y Acondicionamiento Territorial. 
+
+**ARTICULO TERCERO. - TRANSCRIBIR**, la presente Resolución a la Gerencia Municipal, Gerencia de Desarrollo Urbano y Rural, `r interesado_notif` y demás áreas pertinentes para su conocimiento y fines de Ley.
+
+**ARTICULO CUARTO. - DISPONER**, a la Subgerencia de Tecnologías de Información la publicación de la presente resolución en el portal web institucional.
+
+::: {.content-visible when-format="docx"}
+::: {custom-style="Title"}
+**REGISTRESE, COMUNÍQUESE Y PUBLIQUESE.**
+:::
+:::
+
+::: {.content-visible when-format="pdf"}
+\vspace{0.4cm}
+\begin{center}
+\textbf{REGISTRESE, COMUNÍQUESE Y PUBLIQUESE.}
+\end{center}
+:::

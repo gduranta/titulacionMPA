@@ -1,0 +1,27 @@
+\usepackage{graphicx}
+\usepackage{eso-pic}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+\usepackage{setspace}
+\setstretch{1.02}
+\setlength{\parskip}{0.30cm}
+\usepackage{array}
+
+% Fondo membretado oficial y encabezado institucional en TODAS las páginas
+\AddToShipoutPictureBG{%
+  \AtPageLowerLeft{%
+    \includegraphics[width=\paperwidth,height=\paperheight]{\detokenize{FONDO_INFORME_LEGAL.png}}%
+  }%
+  \AtPageUpperLeft{%
+    \put(0,-2.68cm){%
+      \begin{minipage}[t]{\paperwidth}
+        \centering
+        {\bfseries\fontsize{10.5}{12.5}\selectfont GERENCIA DE ASESORÍA LEGAL}\\[2.5pt]%
+        {\bfseries\fontsize{8.5}{10.5}\selectfont “Año de la Recuperación y Consolidación de la Economía Peruana”}%
+      \end{minipage}%
+    }%
+  }%
+}
+
+\pagestyle{empty}

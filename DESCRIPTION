@@ -1,0 +1,37 @@
+Package: titulacionMPA
+Title: Sistema Estandarizado de Formalización y Titulación de Predios - MPA
+Version: 1.0.0
+Authors@R: 
+    person(given = "GDUR",
+           family = "Municipalidad Provincial de Anta",
+           role = c("aut", "cre"),
+           email = "gdur@munianta.gob.pe")
+Description: Paquete estilo tidyverse para la generación rápida de expedientes
+    de formalización y titulación de predios urbanos (Informes SGPUAT, GDUR,
+    Asesoría Legal, Resoluciones de Alcaldía y Títulos de Propiedad) mediante
+    Typst (PDF) y Quarto (DOCX) a partir de una plantilla maestra en Excel.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Config/testthat/edition: 3
+Depends:
+    R (>= 3.5.0)
+Imports:
+    cli,
+    dplyr,
+    glue,
+    jsonlite,
+    magrittr,
+    purrr,
+    readxl,
+    rlang,
+    stringr,
+    tibble,
+    writexl,
+    xml2
+Suggests:
+    bslib,
+    pkgload,
+    shiny,
+    testthat (>= 3.0.0)
+Config/roxygen2/version: 8.1.1

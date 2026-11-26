@@ -1,0 +1,28 @@
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{fontspec}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{sectsty}
+\usepackage{etoolbox}
+
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+\sectionfont{\normalfont\bfseries\fontsize{10.5}{12}\selectfont}
+\subsectionfont{\normalfont\bfseries\fontsize{10.5}{12}\selectfont}
+\setlength{\parskip}{0.16cm}
+\linespread{1.02}
+\AtBeginEnvironment{longtable}{\setlength{\parskip}{0pt}\linespread{1}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\includegraphics[width=1.55in,height=0.5in,keepaspectratio]{mpa.png}}
+\fancyhead[C]{\parbox{3.0in}{\centering\color{gray}\bfseries\fontsize{9}{10.5}\selectfont MUNICIPALIDAD PROVINCIAL DE ANTA\\GERENCIA DE DESARROLLO URBANO Y RURAL}}
+\fancyhead[R]{\includegraphics[width=1.55in,height=0.5in,keepaspectratio]{choquequirao.png}}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyfoot[L]{\fontsize{8}{9.5}\selectfont Archivo\\GDUR\\EEIQ}
+\fancyfoot[R]{\fontsize{8}{9.5}\selectfont Página \thepage}
+\setlength{\headheight}{45pt}
+\setlength{\footskip}{0.8cm}
+\fancypagestyle{plain}{\pagestyle{fancy}}

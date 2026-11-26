@@ -1,0 +1,6 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^INICIAR_PROYECTO\.R$
+^test_ejemplo_output$
+^test_output$
+^test_typst_output$

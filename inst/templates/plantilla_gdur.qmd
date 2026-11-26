@@ -1,0 +1,166 @@
+---
+lang: es
+format:
+  docx:
+    reference-doc: ../formatos/ref_informe_gdur.docx
+  pdf:
+    documentclass: article
+    papersize: a4
+    geometry: top=2.8cm, bottom=2.0cm, left=3.0cm, right=2.1cm, headheight=1.35cm, headsep=0.35cm
+    fontsize: 10.5pt
+    pdf-engine: xelatex
+    include-in-header: header_gdur.tex
+    booktabs: false
+    filters:
+      - informe_borders.lua
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  config_rds: ""
+  mz: "A"
+  lote: "1"
+  num_informe: ""
+  informe_referencia: ""
+  fecha: "25 de noviembre de 2026"
+  destinatario_nombre: ""
+  destinatario_cargo: "GERENCIA DE ASESORIA LEGAL"
+---
+
+dest_nombre <- if (nzchar(trimws(as.character(params$destinatario_nombre)))) params$destinatario_nombre else toupper(asesor_leg)
+```{r}
+if (!nzchar(trimws(as.character(params$config_rds))) || !file.exists(params$config_rds)) {
+  stop("Debe ejecutar desde titulacionMPA pasando config_rds.")
+}
+config <- readRDS(params$config_rds)
+source(file.path(config$pkg_root, "R", "00_config.R"))
+source(file.path(config$pkg_root, "R", "01_extractor_memoria.R"))
+source(file.path(config$pkg_root, "R", "02_extractor_excel.R"))
+source(file.path(config$pkg_root, "R", "03_transformador.R"))
+df_all <- obtener_dataset_proyecto(config)
+df <- df_all
+
+sector_nombre    <- config$meta$NOMBRE_SECTOR
+partida_matriz   <- config$meta$PARTIDA_MATRIZ
+res_lotizacion   <- config$meta$RES_APROBACION_LOTIZACION
+fecha_lotizacion <- config$meta$FECHA_APROBACION_LOTIZACION
+ordenanza_tupa   <- config$meta$ORDENANZA_TUPA
+alcalde_nombre   <- config$meta$ALCALDE_NOMBRE
+alcalde_dni      <- config$meta$ALCALDE_DNI
+domicilio_legal  <- config$meta$DOMICILIO_LEGAL
+gerente_mun      <- config$meta$GERENTE_MUNICIPAL
+asesor_leg       <- config$meta$ASESOR_LEGAL
+gerente_gdur     <- config$meta$GERENTE_GDUR
+subgerente_sg    <- config$meta$SUBGERENTE_SGPUAT
+
+mz <- toupper(trimws(as.character(params$mz)))
+lote <- trimws(as.character(params$lote))
+item <- df[toupper(df$mz) == mz & as.character(df$lote) == lote, , drop = FALSE]
+if (nrow(item) != 1L) stop("Predio inexistente o duplicado: Mz. ", mz, " Lote ", lote)
+item <- item[1, , drop = FALSE]
+
+numero <- function(x) {
+  valor <- trimws(as.character(x))
+  if (is.na(valor) || !nzchar(valor)) return("XXX")
+  if (grepl("XXX|PENDIENTE", valor, ignore.case = TRUE)) return("XXX")
+  n <- regmatches(valor, regexpr("(?<![0-9])[0-9]{1,3}(?![0-9])", valor, perl = TRUE))
+  if (!length(n)) "XXX" else n
+}
+
+num_gdur_param <- trimws(as.character(params$num_informe))
+num_gdur <- if (nzchar(num_gdur_param)) num_gdur_param else numero(item$num_informe_gdur)
+
+num_sgp_param <- trimws(as.character(params$informe_referencia))
+num_sgpuat <- if (nzchar(num_sgp_param)) num_sgp_param else numero(item$num_informe_sgpuat)
+
+expediente <- trimws(as.character(item$expediente))
+if (is.na(expediente) || !nzchar(expediente)) expediente <- as.character(item$exp_titulo)
+titular <- as.character(item$t1_nombre)
+tratamiento <- if (isTRUE(item$fem1)) "Sra." else "Sr."
+titulares <- as.character(item$nombres_resumen)
+verbo_sol <- if (isTRUE(item$es_pareja)) "solicitan" else "solicita"
+fecha_doc <- trimws(as.character(params$fecha))
+if (!nzchar(fecha_doc)) fecha_doc <- "25 de noviembre de 2026"
+dest_nombre <- if (nzchar(trimws(as.character(params$destinatario_nombre)))) params$destinatario_nombre else toupper(asesor_leg)
+```
+
+::: {.content-visible when-format="docx"}
+::: {custom-style="Title"}
+**INFORME N° `r num_gdur` - 2026 - EEIQ / GDUR-MPA**
+:::
+
+|  |  |  |
+|:---|:---:|:---|
+| **A** | : | **`r dest_nombre`**<br>`r params$destinatario_cargo` |
+| **DE** | : | **`r gerente_gdur`.**<br>GERENTE DE DESARROLLO URBANO Y RURAL. |
+| **ASUNTO** | : | Procedimiento para la formalización de predios en el marco de la Ley N.° 28687.<br>**`r tratamiento` `r titular` - PREDIO Mz. `r mz` Lote `r lote` `r sector_nombre`.** |
+| **REFERENCIA** | : | **INFORME N° `r num_sgpuat`-2026-SGPUAT-GDUR-MPA.**<br>**EXP. ADM. N.° `r expediente`** |
+| **FECHA** | : | Anta; `r fecha_doc`. |
+
+:::
+
+::: {.content-visible when-format="pdf"}
+dest_nombre <- if (nzchar(trimws(as.character(params$destinatario_nombre)))) params$destinatario_nombre else toupper(asesor_leg)
+```{=latex}
+\begin{center}\textbf{\underline{INFORME N° `r num_gdur` - 2026 - EEIQ / GDUR-MPA}}\end{center}
+\vspace{-0.2cm}
+\noindent\begin{tabular}{@{}p{2.25cm}@{\hspace{0.15cm}}p{0.35cm}@{\hspace{0.15cm}}p{\dimexpr\linewidth-2.9cm\relax}@{}}
+\textbf{A} & : & \textbf{`r dest_nombre`}\\
+ & & `r params$destinatario_cargo`\\[3pt]
+\textbf{DE} & : & \textbf{`r gerente_gdur`.}\\
+ & & GERENTE DE DESARROLLO URBANO Y RURAL.\\[3pt]
+\textbf{ASUNTO} & : & Procedimiento para la formalización de predios en el marco de la Ley N.° 28687.\\
+ & & \textbf{`r tratamiento` `r titular` - PREDIO Mz. `r mz` Lote `r lote` `r sector_nombre`.}\\[3pt]
+\textbf{REFERENCIA} & : & \textbf{INFORME N° `r num_sgpuat`-2026-SGPUAT-GDUR-MPA.}\\
+ & & \textbf{EXP. ADM. N.° `r expediente`}\\[3pt]
+\textbf{FECHA} & : & Anta; `r fecha_doc`.
+\end{tabular}
+\vspace{0.1cm}\par\noindent\rule{\linewidth}{0.3pt}
+dest_nombre <- if (nzchar(trimws(as.character(params$destinatario_nombre)))) params$destinatario_nombre else toupper(asesor_leg)
+```
+:::
+
+Previo un cordial saludo, me dirijo a usted para remitir el informe sobre el procedimiento de formalización del predio indicado.
+
+## ANTECEDENTES
+
+Mediante el expediente administrativo N.° `r expediente`, `r titulares` `r verbo_sol` la formalización del predio ubicado en la Mz. `r mz` Lote `r lote` de la `r sector_nombre`, distrito y provincia de Anta, departamento de Cusco.
+
+El INFORME N° `r num_sgpuat`-2026-SGPUAT-GDUR-MPA evalúa la solicitud y sus documentos sustentatorios. Los requisitos consignados para la continuación del trámite son los siguientes:
+
+| ITEM | DESCRIPCION | OBSERVACION |
+|:---:|:---|:---:|
+| 1 | Formato Único de Trámite (FUT) y solicitud dirigida al titular del pliego | CUMPLE |
+| 2 | Copia legalizada o fedateada del DNI de los titulares. | CUMPLE |
+| 3 | Declaración jurada de que sobre la superficie no exista proceso judicial ni administrativo pendiente en el que se discuta el mejor derecho de propiedad de posesión. | CUMPLE |
+| 4 | Constancia de ser socio activo del PP.JJ , AA.HH., COMUNIDAD, otorgado por la junta directiva vigente. | CUMPLE |
+| 5 | Constancia de posesión emitida por la junta directiva vigente. | CUMPLE |
+| 6 | Certificado o declaración jurada de defunción del cónyuge o del conviviente de ser el caso. | `r item$tupa_defuncion` |
+| 7 | Copia de acta de matrimonio de ser el caso. | `r item$tupa_matrimonio` |
+| 8 | Acta de convivencia de ser el caso. | `r item$tupa_convivencia` |
+| 9 | Copia de documentos que acrediten la posesión con 5 años de antigüedad (recibo de luz, autoevaluó, etc.). | CUMPLE |
+| 10 | Acta de colindancia (según modelo) con firmas legalizadas o fedateadas. | CUMPLE |
+| 11 | Recibo de pago por costo de desplazamiento de acuerdo a la zona y por inspección técnica (TUSNE). | CUMPLE |
+
+## NORMATIVA
+
+El numeral 4.3 del artículo 4 de la Ley N.° 28687 establece la competencia del alcalde provincial para suscribir los títulos de propiedad dentro de su jurisdicción. El numeral 27 del artículo 20 de la Ley Orgánica de Municipalidades, Ley N.° 27972, atribuye al alcalde el otorgamiento de títulos de propiedad emitidos en el ámbito de su jurisdicción y competencia.
+
+## CONCLUSIÓN
+
+De acuerdo con la evaluación técnico administrativa detallada en el INFORME N° `r num_sgpuat`-2026-SGPUAT-GDUR-MPA, se emite **OPINIÓN FAVORABLE** para la continuación del procedimiento de formalización del predio Mz. `r mz` Lote `r lote` de la `r sector_nombre`, a favor de `r titulares`. Corresponde remitir el expediente a Gerencia Municipal para la continuación del trámite y la opinión legal que corresponda.
+
+Es todo cuanto informo para los fines pertinentes, adjuntando el expediente administrativo en original.
+
+::: {.content-visible when-format="docx"}
+Atentamente.
+:::
+
+::: {.content-visible when-format="pdf"}
+dest_nombre <- if (nzchar(trimws(as.character(params$destinatario_nombre)))) params$destinatario_nombre else toupper(asesor_leg)
+```{=latex}
+\begin{center}Atentamente.\end{center}
+dest_nombre <- if (nzchar(trimws(as.character(params$destinatario_nombre)))) params$destinatario_nombre else toupper(asesor_leg)
+```
+:::
